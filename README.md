@@ -49,6 +49,20 @@ npm run serve    # server.js          — http://localhost:8327/
 - 본문의 그림·소리 주소는 `https://daytip.kr/wp-content/uploads/…` 절대 주소든 `/wp-content/uploads/…` 루트 상대든 빌드가 BASE_PATH 에 맞춰 고친다. `srcset` 은 없는 파일을 빼 준다.
 - 분류 id: 정부지원금 19 · 부동산·세금 20 · 생활법률·안전 21 · 명절·생활상식 22 · 공부합시다 23(중국어 24, 일본어 25) · 세계 이야기 26(일본이야기 27, 중국이야기 28).
 
+## 공부 사이트 꼴 (2026-11-08)
+
+홈·메뉴는 중국어·일본어 공부 중심이다. 아래 페이지는 모두 **빌드 때마다 수업 글 본문에서 뽑아** 만든다(`tools/lessons.mjs`가 글 하나를 `{ day, allAudio, words:[{word, reading, meaning, audio, exampleAudio}] }`로 읽는다 — "오늘 배운 것" 표를 기준으로, 그림 카드 `alt="낱말 읽기 · 뜻"`와 바로 뒤의 `dayN-i-word/example.mp3`를 맞춘다. 소리 파일 경로는 본문에 적힌 전체 경로를 쓴다).
+
+| 주소 | 내용 |
+|---|---|
+| `/` | 오늘(최근)의 중국어·일본어 수업 카드(핵심 낱말·전체 듣기·이어서 공부하기), 도구, 최근 수업, 읽을거리 |
+| `/chinese-course/` `/japanese-course/` | 과정 목차. `data/pages*.json`의 페이지 본문은 **안 쓰고** 소개 문단과 단원(`<h2>발음<span>1~10일차 …</span></h2><p>설명</p>`) 구조만 읽는다. 공개 수업은 링크+전체 듣기+"공부했어요" 체크(localStorage), 예약 글은 "N월 N일 공개", 복습은 범위 끝 뒤에 |
+| `/vocabulary/` `/vocabulary/chinese/` `/vocabulary/japanese/` | 단어장 — 낱말·읽기·뜻·출처 수업·녹음, 예문은 복습 글에서. JS 없이도 일차별 목록, JS 있으면 찾기·언어·일차 거르기(`?q=`) |
+| `/kana/` `/pinyin/` | 히라가나·가타카나 표 / 성조·성모·운모 표. 수업에 그 글자 하나짜리 낱말 녹음이 있으면 녹음(초록 점), 없으면 브라우저 `speechSynthesis`(기계 음성이라고 표시) |
+| `/life/` | 정부지원금·생활법률·부동산·명절 모음 — 홈·메뉴에서 빠지고 메뉴 끝 "생활정보"로만 |
+
+본문의 인라인 스타일은 색·배경·테두리만 테마 클래스(`.c-* .bg-* .bd*`)로 바꿔 넣어 어두운 모드에서도 읽힌다(`restyle()`); 배치용 속성은 그대로. 수업 글은 맨 위 "전체 듣기" 상자와 맨 아래 "지난 수업" 꼬리를 떼고 빌드가 다시 그린다. `src/study.js`가 소리 재생·진도·단어장 찾기를 맡는다(프레임워크 없음).
+
 ## 주소 (워드프레스와 동일)
 
 `/<slug>/`, `/page/N/`, `/category/<slug>/`·`/category/study/chinese/`(상위 분류는 하위 글 포함)와 `/page/N/`, `/author/tjsgotn/`(noindex), `/feed/`(RSS, `/feed.xml` 도 같음), `/sitemap.xml`(`/sitemaps.xml` 도), `/robots.txt`, `/ads.txt`, `/404.html`, `/wp-content/uploads/…`. canonical 은 늘 `https://daytip.kr/…`.
