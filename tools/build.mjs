@@ -26,7 +26,15 @@ const read = (n) => JSON.parse(fs.readFileSync(path.join(DATA, n), 'utf8'));
 const site = read('site.json');
 const categories = read('categories.json');
 const tags = read('tags.json');
-const pagesAll = read('pages.json');
+/* 페이지 = data/pages.json + data/pages/*.json (황금키워드가 수업 목차 페이지를 여기에 다시 쓴다; slug 가 같으면 이 쪽이 이긴다) */
+const pageMap = new Map();
+for (const p of read('pages.json')) pageMap.set(p.slug, p);
+const extraPages = path.join(DATA, 'pages');
+if (fs.existsSync(extraPages)) for (const f of fs.readdirSync(extraPages).filter((f) => f.endsWith('.json')).sort()) {
+  const p = JSON.parse(fs.readFileSync(path.join(extraPages, f), 'utf8'));
+  for (const one of Array.isArray(p) ? p : [p]) pageMap.set(one.slug, one);
+}
+const pagesAll = [...pageMap.values()];
 const users = read('users.json');
 const mediaById = new Map(read('media.json').map((m) => [m.id, m]));
 
