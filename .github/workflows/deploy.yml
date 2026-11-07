@@ -28,14 +28,14 @@ jobs:
         with:
           node-version: 24
       - name: Build site
-        # 테스트 주소 seonhaesoo.github.io/daytip/ 용. daytip.kr 로 옮길 때 BASE_PATH 를 비운다
+        # 2026-11-08 daytip.kr 로 옮김 — 도메인 루트에서 서비스하므로 BASE_PATH 는 비운다 (테스트 주소로 돌리려면 /daytip)
         run: node tools/build.mjs
         env:
-          BASE_PATH: /daytip
+          BASE_PATH: ""
       - name: Check links
         run: node tools/check-links.mjs
         env:
-          BASE_PATH: /daytip
+          BASE_PATH: ""
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
