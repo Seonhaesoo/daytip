@@ -12,8 +12,10 @@
  * 빌드는 date 가 지금보다 뒤인 글을 빼므로, 그날이 되면 정해진 시각 배포에 저절로 실린다. */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
+// fileURLToPath 로 — URL 의 pathname 을 그대로 쓰면 '개발' 같은 한글 폴더가 %EA%B0%9C… 로 남아 엉뚱한 곳에 쓴다
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const [postsFile, mediaFile] = process.argv.slice(2);
 const posts = JSON.parse(fs.readFileSync(postsFile, 'utf8'));
 const featured = JSON.parse(fs.readFileSync(mediaFile, 'utf8'));
