@@ -1,0 +1,13 @@
+{
+  "name": "daytip",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "데이팁 — daytip.kr 정적 사이트 (워드프레스에서 옮김). 중국어·일본어 하루 한 마디, 정부지원금·생활법률·명절 상식",
+  "scripts": {
+    "export": "node tools/export-wp.mjs",
+    "build": "node tools/build.mjs",
+    "serve": "node server.js",
+    "check": "node tools/check-links.mjs"
+  }
+}

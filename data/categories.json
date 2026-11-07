@@ -1,0 +1,101 @@
+[
+ {
+  "id": 1,
+  "count": 0,
+  "description": "",
+  "link": "https://daytip.kr/category/uncategorized/",
+  "name": "Uncategorized",
+  "slug": "uncategorized",
+  "parent": 0
+ },
+ {
+  "id": 23,
+  "count": 0,
+  "description": "",
+  "link": "https://daytip.kr/category/study/",
+  "name": "공부합시다",
+  "slug": "study",
+  "parent": 0
+ },
+ {
+  "id": 22,
+  "count": 5,
+  "description": "",
+  "link": "https://daytip.kr/category/seasonal-life/",
+  "name": "명절·생활상식",
+  "slug": "seasonal-life",
+  "parent": 0
+ },
+ {
+  "id": 20,
+  "count": 6,
+  "description": "",
+  "link": "https://daytip.kr/category/housing-tax/",
+  "name": "부동산·세금",
+  "slug": "housing-tax",
+  "parent": 0
+ },
+ {
+  "id": 21,
+  "count": 25,
+  "description": "",
+  "link": "https://daytip.kr/category/life-safety/",
+  "name": "생활법률·안전",
+  "slug": "life-safety",
+  "parent": 0
+ },
+ {
+  "id": 26,
+  "count": 0,
+  "description": "",
+  "link": "https://daytip.kr/category/world/",
+  "name": "세계 이야기",
+  "slug": "world",
+  "parent": 0
+ },
+ {
+  "id": 25,
+  "count": 26,
+  "description": "",
+  "link": "https://daytip.kr/category/study/japanese/",
+  "name": "일본어",
+  "slug": "japanese",
+  "parent": 23
+ },
+ {
+  "id": 27,
+  "count": 21,
+  "description": "",
+  "link": "https://daytip.kr/category/world/japan/",
+  "name": "일본이야기",
+  "slug": "japan",
+  "parent": 26
+ },
+ {
+  "id": 19,
+  "count": 37,
+  "description": "",
+  "link": "https://daytip.kr/category/government-benefits/",
+  "name": "정부지원금",
+  "slug": "government-benefits",
+  "parent": 0
+ },
+ {
+  "id": 24,
+  "count": 40,
+  "description": "",
+  "link": "https://daytip.kr/category/study/chinese/",
+  "name": "중국어",
+  "slug": "chinese",
+  "parent": 23
+ },
+ {
+  "id": 28,
+  "count": 16,
+  "description": "",
+  "link": "https://daytip.kr/category/world/china/",
+  "name": "중국이야기",
+  "slug": "china",
+  "parent": 26
+ }
+]
