@@ -60,7 +60,7 @@ npm run serve    # server.js          — http://localhost:8327/
 | `/vocabulary/` `/vocabulary/chinese/` `/vocabulary/japanese/` | 단어장 — 낱말·읽기·뜻·출처 수업·녹음, 예문은 복습 글에서. JS 없이도 일차별 목록, JS 있으면 찾기·언어·일차 거르기(`?q=`) |
 | `/kana/` `/pinyin/` | 히라가나·가타카나 표 / 성조·성모·운모 표. 수업에 그 글자 하나짜리 낱말 녹음이 있으면 녹음(초록 점), 없으면 브라우저 `speechSynthesis`(기계 음성이라고 표시) |
 | `/life/` | 정부지원금·생활법률·부동산·명절 모음 — 홈·메뉴에서 빠지고 메뉴 끝 "생활정보"로만 |
-| `/admin/` | 운영자용 관리 현황 (noindex·robots Disallow, 메뉴·사이트맵에 없음) — 아래 "관리 현황" |
+| `/admin/` | 운영자용 관리 현황 — 비밀번호로 잠김(본문 암호화), noindex·robots Disallow, 메뉴·사이트맵에 없음 — 아래 "관리 현황" |
 
 본문의 인라인 스타일은 색·배경·테두리만 테마 클래스(`.c-* .bg-* .bd*`)로 바꿔 넣어 어두운 모드에서도 읽힌다(`restyle()`); 배치용 속성은 그대로. 수업 글은 맨 위 "전체 듣기" 상자와 맨 아래 "지난 수업" 꼬리를 떼고 빌드가 다시 그린다. `src/study.js`가 소리 재생·진도·단어장 찾기를 맡는다(프레임워크 없음).
 
@@ -68,13 +68,32 @@ npm run serve    # server.js          — http://localhost:8327/
 
 운영자용 요약 한 장 — 방문자 · 수업 현황(최신 공개·다음 예약·소리 점검·복습·단어장) · 글 현황(묶음별 편수·최근 글·깨진 링크·빌드 시각·커밋) · 바로가기(서치 콘솔·애널리틱스·서치어드바이저·Actions·저장소·애드센스). `tools/build.mjs` 맨 끝에서 만들고 `src/admin.css` 가 이 페이지에만 붙는다.
 
-- **비공개가 아니다.** 정적 호스팅이라 주소를 알면 누구나 본다. `noindex,nofollow` + `robots.txt` 의 `Disallow: /admin/`, 사이트맵·메뉴·바닥·피드에 없음, 통계·광고 스크립트 없음. **비밀 값·메일·키·토큰은 절대 넣지 않는다.**
+- **비밀번호로 잠겨 있다** — 아래 "비밀번호". `noindex,nofollow` + `robots.txt` 의 `Disallow: /admin/`, 사이트맵·메뉴·바닥·피드에 없음, 통계·광고 스크립트 없음. 암호문은 공개된 곳에 있으므로 **비밀 값·메일·키·토큰은 그래도 넣지 않는다.**
 - 깨진 링크 수는 빌드가 `tools/check-links.mjs` 의 `checkLinks()` 로 `dist/` 전체를 훑어 적는다(로컬에서는 `dist/` 에 남은 옛 파일도 세므로 CI 숫자가 기준).
 - 소리 점검은 수업·복습 글(공개+예약) 본문의 `<audio>` `src` 가 `public/` 에 있는지 본다.
 
+### 비밀번호 (`ADMIN_PASSWORD`)
+
+GitHub Pages 에는 서버가 없어 비밀번호를 서버에서 확인할 수 없다. 그래서 **빌드 때 현황 본문을 암호화**해서 싣고, 브라우저가 비밀번호로 푼다(StatiCrypt 와 같은 방식). 스크립트로 `비밀번호 == …` 를 비교하는 것이 아니라, 비밀번호가 없으면 본문 자체를 읽을 수 없다.
+
+정하기·바꾸기 — 운영자가 할 일:
+
+```
+gh secret set ADMIN_PASSWORD -R Seonhaesoo/daytip      # 물으면 비밀번호를 붙여 넣는다 (또는 저장소 Settings → Secrets and variables → Actions)
+gh workflow run build-and-deploy -R Seonhaesoo/daytip   # 다시 배포 (Actions 화면의 Run workflow 와 같다)
+```
+
+- **바꾼 비밀번호는 다시 배포해야 적용된다.** 비밀 값만 바꾸면 이미 올라간 페이지는 옛 비밀번호로 계속 열린다. 서두르지 않으면 다음 정기 배포(매일 06:05·07:05 KST)나 다음 push 때 바뀐다.
+- **비밀번호는 길게.** 암호문이 공개된 페이지에 들어 있어 누구나 내려받아 오프라인에서 횟수 제한 없이 대입해 볼 수 있다. 낱말 네댓 개를 이은 문장이나 무작위 20자 이상을 쓰고, 다른 곳에서 쓰는 비밀번호는 쓰지 않는다. 짧은 비밀번호는 반복 수가 많아도 뚫린다.
+- 새어 나갔다 싶으면 비밀번호를 바꾸고 다시 배포한다. 다만 이미 내려받아 간 옛 암호문은 옛 비밀번호로 계속 풀린다(그때까지의 숫자).
+- **비밀 값이 없으면 닫힌 채로 나간다** — `/admin/` 에 "관리자 비밀번호가 아직 설정되지 않았어요" 만 나오고 현황 자료는 한 글자도 싣지 않는다. 로컬 빌드도 마찬가지다.
+- 방식: 키 = PBKDF2-SHA256(비밀번호, salt 16바이트, 600,000회) → AES-256-GCM(IV 12바이트, 인증 태그 16바이트). salt·IV 는 빌드마다 새로 뽑는다(`node:crypto`). 페이지에는 비밀번호 칸, salt·iv·암호문(base64)·반복 수, 푸는 스크립트(`crypto.subtle`)만 있다. 평문은 `dist/` 어디에도 쓰지 않고, 잠긴 쪽에 평문 표식이 보이면 빌드가 멈춘다.
+- 열어 두기: 기본은 그 탭을 닫을 때까지(`sessionStorage`), "이 기기에서 기억" 을 켜면 그 기기에 남는다(`localStorage`). 저장하는 것은 비밀번호가 아니라 뽑아낸 키이고, salt 가 빌드마다 바뀌므로 **다음 배포 뒤에는 다시 묻는다**. "잠그기" 를 누르면 지운다. 같이 쓰는 기기에서는 기억을 켜지 않는다.
+- 로컬에서 열어 보기(시험용 비밀번호는 셸에서만 주고 커밋하지 않는다): bash `ADMIN_PASSWORD='아무거나' npm run build && npm run serve`, PowerShell `$env:ADMIN_PASSWORD='아무거나'; npm run build; npm run serve` → http://localhost:8327/admin/ (`crypto.subtle` 은 https 나 localhost 에서만 된다).
+
 ### 방문자 자료 (GA4 → `data/admin/stats.json`)
 
-`tools/fetch-ga.mjs` 가 GA4 Data API(`runReport`)에서 받아 `data/admin/stats.json` 에 쓰고, 빌드가 그 파일을 읽어 어제·최근 7일·최근 30일(앞선 기간 대비), 30일 막대그래프, 많이 본 페이지 20, 유입 10, 기기를 그린다(`dist/admin/stats.json` 으로도 복사). **파일이 없으면 "아직 방문자 자료가 없어요", 마지막 갱신이 이틀을 넘으면 "오래됐어요" 알림**이 뜨고 나머지 칸은 그대로 나온다. npm 의존성은 없다(JWT 는 `node:crypto` 로 서명).
+`tools/fetch-ga.mjs` 가 GA4 Data API(`runReport`)에서 받아 `data/admin/stats.json` 에 쓰고, 빌드가 그 파일을 읽어 어제·최근 7일·최근 30일(앞선 기간 대비), 30일 막대그래프, 많이 본 페이지 20, 유입 10, 기기를 그린다. **이 파일은 읽기만 하고 `dist/` 로 복사하지 않는다** — 숫자는 암호화된 본문 안에만 있다. **파일이 없으면 "아직 방문자 자료가 없어요", 마지막 갱신이 이틀을 넘으면 "오래됐어요" 알림**이 뜨고 나머지 칸은 그대로 나온다. npm 의존성은 없다(JWT 는 `node:crypto` 로 서명).
 
 켜는 법 — 한 번만:
 
@@ -96,7 +115,7 @@ $env:GA_KEY_FILE='C:\keys\daytip-ga.json'; $env:GA_PROPERTY_ID='123456789'; node
 
 - 환경 변수: `GA_KEY_JSON`(키 JSON 내용) 또는 `GA_KEY_FILE`(키 파일 경로, `GA_KEY_JSON` 이 없을 때), `GA_PROPERTY_ID`. 없으면 알림만 찍고 종료 코드 0, 파일은 건드리지 않는다.
 - `STATS_FILE=경로` 를 주면 fetch-ga 는 그 파일에 쓰고 빌드는 그 파일을 읽는다(시험용 자료를 저장소 밖에 둘 때).
-- 로컬에서 받은 `data/admin/stats.json` 을 커밋하면 그 숫자가 사이트에 남고, 비밀 값이 들어온 뒤에는 CI 가 매번 덮어쓴다. 평소에는 커밋하지 않는 편이 낫다.
+- `data/admin/` 은 `.gitignore` 에 있다 — 저장소가 공개라서 커밋하면 숫자가 그대로 드러난다. 커밋하지 않는다.
 - 파일 꼴: `fetchedAt`(KST ISO, `+09:00`), `periods.{yesterday,yesterdayPrev,last7,prev7,last30,prev30}.{users,pageviews,sessions}`, `daily[{date,users,pageviews,sessions}]`(60일, 어제까지), `pages[{path,pageviews,users}]`, `sources[{source,medium,sessions,users}]`, `devices[{device,users,sessions}]`. 방문자(활성 사용자)는 날마다 더하면 겹치므로 기간 합계는 GA 에 기간별로 따로 묻는다.
 
 ## 주소 (워드프레스와 동일)

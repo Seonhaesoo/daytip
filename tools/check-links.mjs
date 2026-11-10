@@ -9,7 +9,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /* → { htmls, checked, external, missing: Map(주소 → 처음 나온 페이지) } */
-export function checkLinks(OUT, BASE = '') {
+/* extra: [[이름, HTML]] — dist/ 에 쓰지 않은 HTML 조각도 같이 본다(/admin/ 의 암호화되는 본문) */
+export function checkLinks(OUT, BASE = '', extra = []) {
   const htmls = [];
   (function walk(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (e.name.endsWith('.html')) htmls.push(f); } })(OUT);
 
@@ -22,11 +23,12 @@ export function checkLinks(OUT, BASE = '') {
     if (p.endsWith('/')) return fs.existsSync(path.join(f, 'index.html'));
     return fs.existsSync(f) && fs.statSync(f).isFile();
   };
-  for (const f of htmls) {
-    const h = fs.readFileSync(f, 'utf8');
-    const page = '/' + path.relative(OUT, f).replace(/\\/g, '/');
+  for (const f of [...htmls, ...extra]) {
+    const frag = Array.isArray(f);
+    const h = frag ? f[1] : fs.readFileSync(f, 'utf8');
+    const page = frag ? f[0] : '/' + path.relative(OUT, f).replace(/\\/g, '/');
     const urls = new Set();
-    const body = h.slice(h.indexOf('<body'));   /* head 의 canonical·og:url·피드 링크는 일부러 절대 주소다 — 본문에 남은 절대 주소만 잡는다 */
+    const body = frag ? h : h.slice(h.indexOf('<body'));/* head 의 canonical·og:url·피드 링크는 일부러 절대 주소다 — 본문에 남은 절대 주소만 잡는다 */
     for (const m of body.matchAll(/\s(?:href|src|poster)="([^"]+)"/g)) urls.add(m[1]);
     for (const m of h.matchAll(/<link[^>]*rel="(?:icon|apple-touch-icon)"[^>]*href="([^"]+)"/g)) urls.add(m[1]);
     for (const m of body.matchAll(/\ssrcset="([^"]+)"/g)) for (const s of m[1].split(',')) urls.add(s.trim().split(/\s+/)[0]);

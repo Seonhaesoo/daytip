@@ -5,12 +5,13 @@
  *   단어장(/vocabulary/), 가나표(/kana/), 병음표(/pinyin/), 생활정보 모음(/life/) 을 수업 글 본문에서 뽑아(tools/lessons.mjs) 빌드 때마다 만든다.
  * BASE_PATH=/daytip 처럼 주면 모든 루트 상대 주소 앞에 붙인다(테스트용 seonhaesoo.github.io/daytip/). canonical 은 늘 https://daytip.kr 이다.
  * 발행일이 아직 안 된 글(KST 기준 미래)은 빼고 만든다 — 목차에는 "N월 N일 공개" 로만 보인다.
- * 2026-11-10 /admin/ 관리 현황(방문자·수업·글·바로가기) — 맨 끝에서 만든다. noindex·robots Disallow, 사이트맵·메뉴·바닥·피드에 없음.
+ * 2026-11-10 /admin/ 관리 현황(방문자·수업·글·바로가기) — 맨 끝에서 만든다. noindex·robots Disallow, 사이트맵·메뉴·바닥·피드에 없음. 본문은 ADMIN_PASSWORD 로 암호화해 싣고, 없으면 자료 없는 닫힌 쪽만 낸다.
  *   방문자 숫자는 data/admin/stats.json (tools/fetch-ga.mjs 가 쓴다; STATS_FILE 로 다른 파일을 가리킬 수 있다) 이 있을 때만. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import { LANGS, langOf, lessonDay, reviewRange, parseLesson, parseReview } from './lessons.mjs';
 import { checkLinks } from './check-links.mjs';
 
@@ -674,7 +675,12 @@ if (fs.existsSync(PUBLIC)) copyDir(PUBLIC, OUT);
 write('/.nojekyll', '');
 
 /* ---------- 관리 현황 (/admin/) ---------- */
-/* 운영자만 보는 페이지지만 정적 호스팅이라 주소를 알면 누구나 열 수 있다 — 비밀 값·메일·키는 절대 넣지 않는다.
+/* 운영자만 보는 페이지. 정적 호스팅(서버 없음)이라 비밀번호를 서버에서 물을 수 없다 — 그래서 본문을 빌드 때 암호화해서 싣는다(2026-11-10).
+ *   ADMIN_PASSWORD 가 있으면: 현황 본문 HTML 을 AES-256-GCM 으로 암호화(키 = PBKDF2-SHA256, 아래 ADMIN_KDF_ITER 회, 빌드마다 새 salt 16바이트·IV 12바이트).
+ *     내보내는 /admin/index.html 에는 비밀번호 칸 + salt·iv·암호문(base64) + 푸는 스크립트(crypto.subtle)만 있다. 평문은 dist/ 어디에도 쓰지 않는다.
+ *   ADMIN_PASSWORD 가 없으면(로컬 빌드, 비밀 값을 넣기 전): 현황 자료가 하나도 없는 "아직 설정되지 않았어요" 쪽만 내보낸다 — 닫힌 채로 실패한다.
+ *   암호문은 누구나 내려받아 오프라인에서 비밀번호를 대입해 볼 수 있으니 비밀번호는 길어야 한다. 그래도 비밀 값·메일·키는 넣지 않는다.
+ *   방문자 자료(data/admin/stats.json)는 읽기만 하고 dist/ 로 복사하지 않는다.
  * noindex,nofollow + robots.txt Disallow, 사이트맵·메뉴·바닥·피드에 넣지 않고, 통계·광고 스크립트도 붙이지 않는다.
  * 업로드 파일 복사 뒤에 만든다: 다 만든 dist/ 를 check-links 로 훑어 깨진 링크 수를 적기 때문. */
 {
@@ -689,7 +695,8 @@ write('/.nojekyll', '');
   const STATS_SRC = process.env.STATS_FILE || path.join(DATA, 'admin', 'stats.json');
   let stats = null, fetchedMs = NaN;
   try { if (fs.existsSync(STATS_SRC)) { const j = JSON.parse(fs.readFileSync(STATS_SRC, 'utf8')); fetchedMs = Date.parse(j?.fetchedAt); if (j && Array.isArray(j.daily) && !Number.isNaN(fetchedMs)) stats = j; else console.log('방문자 자료(stats.json)의 꼴이 달라 건너뜁니다'); } } catch (e) { console.log(`방문자 자료(stats.json)를 읽지 못해 건너뜁니다: ${e.message}`); }
-  if (stats) write('/admin/stats.json', JSON.stringify(stats)); else fs.rmSync(path.join(OUT, 'admin', 'stats.json'), { force: true });
+  /* 자료 파일은 dist/ 로 복사하지 않는다 — 예전 빌드가 남긴 것이 있으면(로컬 dist/) 지운다. /admin/ 에는 index.html 하나만 둔다 */
+  fs.rmSync(path.join(OUT, 'admin'), { recursive: true, force: true });
   let vHtml, fetched = '';
   if (!stats) {
     vHtml = `<div class="adm-box"><b>아직 방문자 자료가 없어요</b><p>저장소 Secrets 에 <code>GA_KEY_JSON</code>·<code>GA_PROPERTY_ID</code> 를 넣으면 다음 배포부터 여기에 어제·최근 7일·최근 30일 숫자가 나옵니다. 넣는 법은 README 의 “방문자 자료” 를 보세요. 그 전에는 아래 바로가기의 구글 애널리틱스에서 확인하세요.</p></div>`;
@@ -843,13 +850,34 @@ ${ext('https://adsense.google.com/', '애드센스', '수익·광고 상태')}
 </div>
 <p class="adm-sub"><a href="${url('/sitemap.xml')}">사이트맵</a><a href="${url('/feed/')}">RSS</a><a href="${url('/robots.txt')}">robots.txt</a><a href="${url('/ads.txt')}">ads.txt</a></p>`;
 
-  const ADMIN_JS = `(function(){var v=document.querySelector('[data-fetched]');if(v){var t=Date.parse(v.getAttribute('data-fetched')),a=Date.now()-t,e=document.querySelector('.js-age'),s=document.querySelector('.js-stale');if(!isNaN(t)){var h=Math.floor(a/36e5);if(e)e.textContent=' ('+(h<1?'방금 전':h<48?h+'시간 전':Math.floor(h/24)+'일 전')+')';if(s)s.hidden=a<=1728e5}}
+  /* 현황 본문이 페이지에 들어간 뒤(비밀번호로 푼 뒤) 부른다 — 갱신 뒤 지난 시간·"오래됐어요" 알림, 막대그래프 읽기 줄 */
+  const ADMIN_JS = `function admInit(){var v=document.querySelector('[data-fetched]');if(v){var t=Date.parse(v.getAttribute('data-fetched')),a=Date.now()-t,e=document.querySelector('.js-age'),s=document.querySelector('.js-stale');if(!isNaN(t)){var h=Math.floor(a/36e5);if(e)e.textContent=' ('+(h<1?'방금 전':h<48?h+'시간 전':Math.floor(h/24)+'일 전')+')';if(s)s.hidden=a<=1728e5}}
 document.querySelectorAll('.adm-chart').forEach(function(c){var r=c.querySelector('.read'),d=r.getAttribute('data-default'),on=null;function set(g){if(on)on.classList.remove('on');on=g;if(g){g.classList.add('on');r.textContent=g.getAttribute('data-t')}else r.textContent=d}
-c.addEventListener('pointerover',function(e){var g=e.target.closest('g[data-t]');if(g)set(g)});c.addEventListener('click',function(e){var g=e.target.closest('g[data-t]');if(g)set(g)});c.addEventListener('pointerleave',function(e){if(e.pointerType==='mouse')set(null)})})})();`;
-  const body = `<article class="adm">
-<p class="crumb"><a href="${url('/')}">홈</a><span>›</span>관리</p>
-<h1 class="title">관리 현황</h1>
-<p class="adm-meta">운영자용 요약입니다. 검색에는 안 나오게 해 두었지만 주소를 아는 사람은 누구나 볼 수 있어서, 비밀 값은 여기에 두지 않습니다. 배포할 때마다(매일 아침) 새로 만들어집니다.</p>
+c.addEventListener('pointerover',function(e){var g=e.target.closest('g[data-t]');if(g)set(g)});c.addEventListener('click',function(e){var g=e.target.closest('g[data-t]');if(g)set(g)});c.addEventListener('pointerleave',function(e){if(e.pointerType==='mouse')set(null)})})}`;
+  /* 잠금 풀기 — 비밀번호 → PBKDF2-SHA256 → AES-GCM 키(32바이트) → 복호화 → #adm-root 에 넣고 admInit().
+   * 기억: 비밀번호가 아니라 뽑아낸 키를 둔다. 기본은 sessionStorage(탭을 닫으면 사라짐), "이 기기에서 기억" 을 켜면 localStorage.
+   * 키 앞에 salt 를 붙여 두어, 다시 배포돼 salt 가 바뀌면 조용히 버리고 비밀번호를 다시 묻는다. 저장소를 못 쓰는 브라우저에서도 그냥 열린다. */
+  const UNLOCK_JS = `(function(){var P=JSON.parse(document.getElementById('adm-data').textContent),K='daytip-admin-key',S=window.crypto&&window.crypto.subtle,
+lock=document.getElementById('adm-lock'),form=document.getElementById('adm-form'),pw=document.getElementById('adm-pw'),rem=document.getElementById('adm-rem'),err=document.getElementById('adm-err'),btn=document.getElementById('adm-open'),root=document.getElementById('adm-root'),bar=document.getElementById('adm-bar');
+function b2u(s){var b=atob(s),u=new Uint8Array(b.length),i=0;for(;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
+function u2b(u){var s='',i=0;for(;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s)}
+function forget(){['sessionStorage','localStorage'].forEach(function(n){try{window[n].removeItem(K)}catch(e){}})}
+function saved(){var n=['sessionStorage','localStorage'],i=0,v;for(;i<2;i++){try{v=window[n[i]].getItem(K);if(v)return v}catch(e){}}return ''}
+function keep(raw){forget();try{window[rem.checked?'localStorage':'sessionStorage'].setItem(K,P.salt+':'+u2b(raw))}catch(e){}}
+function fail(m){err.textContent=m;err.hidden=false;pw.setAttribute('aria-invalid','true')}
+function busy(on){btn.disabled=on;btn.textContent=on?'여는 중…':'열기'}
+function derive(pass){return S.importKey('raw',new TextEncoder().encode(pass.normalize('NFC')),'PBKDF2',false,['deriveBits']).then(function(k){return S.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:b2u(P.salt),iterations:P.iter},k,256)}).then(function(b){return new Uint8Array(b)})}
+function open(raw){return S.importKey('raw',raw,{name:'AES-GCM'},false,['decrypt']).then(function(k){return S.decrypt({name:'AES-GCM',iv:b2u(P.iv)},k,b2u(P.ct))}).then(function(b){return new TextDecoder().decode(b)})}
+function show(html){root.innerHTML=html;root.hidden=false;lock.hidden=true;bar.hidden=false;pw.value='';err.hidden=true;pw.removeAttribute('aria-invalid');admInit();var t=location.hash.length>1&&document.getElementById(decodeURIComponent(location.hash.slice(1)));if(t)t.scrollIntoView()}
+document.getElementById('adm-lockbtn').addEventListener('click',function(){forget();root.innerHTML='';root.hidden=true;bar.hidden=true;lock.hidden=false;rem.checked=false;pw.focus()});
+if(!S||!window.TextEncoder){fail('이 브라우저(또는 http 주소)에서는 열 수 없어요. https 주소로, 최신 브라우저에서 열어 주세요.');btn.disabled=true;return}
+form.addEventListener('submit',function(e){e.preventDefault();if(btn.disabled)return;var pass=pw.value;if(!pass){fail('비밀번호를 넣어 주세요');pw.focus();return}busy(true);err.hidden=true;
+derive(pass).then(function(raw){return open(raw).then(function(html){keep(raw);show(html)})}).catch(function(){fail('비밀번호가 맞지 않아요');pw.focus();pw.select()}).then(function(){busy(false)})});
+var s=saved(),i=s.indexOf(':');if(s){if(s.slice(0,i)!==P.salt)forget();else{var raw;try{raw=b2u(s.slice(i+1))}catch(e){forget()}if(raw)open(raw).then(show).catch(forget)}}})();`;
+  const ADMIN_PASSWORD = (process.env.ADMIN_PASSWORD || '').replace(/[\r\n]+$/, '').normalize('NFC');   /* gh secret set 에 파이프로 넣을 때 붙는 줄바꿈은 뗀다 */
+  const ADMIN_KDF_ITER = 600000;                              /* PBKDF2-SHA256 반복 수 (OWASP 2023 권고 하한) */
+  /* 암호화되는 부분 — 현황 본문 전부 */
+  const inner = `<p class="adm-meta">배포할 때마다(매일 아침) 새로 만들어집니다. 비밀번호로 잠겨 있지만 암호문은 공개된 곳에 있으니, 비밀 값은 여기에 두지 않습니다.</p>
 <nav class="adm-jump" aria-label="이 페이지 안"><a href="#visitors">방문자</a><a href="#lessons">수업</a><a href="#posts">글</a><a href="#links">바로가기</a></nav>
 <section class="sec" id="visitors"><h2>방문자${fetched ? `<small data-fetched="${fetched.slice(0, 19)}+09:00">마지막 갱신 ${fmtMD(fetched)} ${fetched.slice(11, 16)}<span class="js-age"></span></small>` : ''}</h2>
 ${vHtml}</section>
@@ -858,17 +886,47 @@ ${lessonsHtml}</section>
 <section class="sec" id="posts"><h2>글 현황</h2>
 ${postsHtml}</section>
 <section class="sec" id="links"><h2>바로가기</h2>
-${linksHtml}</section>
-</article>`;
+${linksHtml}</section>`;
+  const fill = (r) => inner.replace(LINK_SLOT, () => linkStat(r)).replace(LINK_LIST_SLOT, () => linkList(r));
   const adminCss = fs.readFileSync(path.join(SRC, 'admin.css'), 'utf8').replace(/\n+/g, '\n');
-  const page = shell({ path: '/admin/', title: '관리 현황', description: '데이팁 운영자용 현황 페이지.', body, robots: 'noindex,nofollow', ads: false, extraHead: `<style>${adminCss}</style>`, extraFoot: `<script>${ADMIN_JS}</script>` });
-  const fill = (r) => page.replace(LINK_SLOT, () => linkStat(r)).replace(LINK_LIST_SLOT, () => linkList(r));
-  write('/admin/index.html', fill(null));
-  /* 방금 쓴 /admin/ 까지 포함해 dist/ 전체를 점검하고, 그 수를 채워 다시 쓴다 */
+  const adminPage = (content, foot = '') => shell({ path: '/admin/', title: '관리 현황', description: '데이팁 운영자용 현황 페이지.', robots: 'noindex,nofollow', ads: false, extraHead: `<style>${adminCss}</style>`, extraFoot: foot, body: `<article class="adm">
+<p class="crumb"><a href="${url('/')}">홈</a><span>›</span>관리</p>
+<h1 class="title">관리 현황</h1>
+${content}
+</article>` });
+  /* 비밀번호가 없을 때 — 현황 자료는 한 글자도 넣지 않는다 */
+  const closedPage = adminPage(`<div class="adm-box"><b>관리자 비밀번호가 아직 설정되지 않았어요</b><p>비밀번호를 정해야 이 페이지가 열립니다. 그 전에는 현황 자료를 싣지 않습니다.</p></div>
+<p class="note">운영자에게: 저장소 Secrets 에 <code>ADMIN_PASSWORD</code> 를 넣고 다시 배포하세요 — <code>gh secret set ADMIN_PASSWORD -R Seonhaesoo/daytip</code> 를 실행해 비밀번호를 입력한 뒤, GitHub Actions 에서 build-and-deploy 를 다시 돌리면 됩니다. 자세한 것은 README 의 “관리 현황” 을 보세요.</p>`);
+  /* 먼저 닫힌 쪽을 써 두고(예전 빌드의 평문이 남지 않게), 본문 링크는 dist/ 에 쓰지 않은 채 점검에 얹는다 */
+  write('/admin/index.html', closedPage);
   let linkResult = null;
-  try { linkResult = checkLinks(OUT, BASE); } catch (e) { console.log(`링크 점검을 못 했습니다: ${e.message}`); }
-  write('/admin/index.html', fill(linkResult));
-  console.log(`관리 현황 /admin/ — 방문자 자료 ${stats ? `있음(${stats.fetchedAt})` : '없음'} · 깨진 링크 ${linkResult ? linkResult.missing.size : '?'}개 · 소리 없는 수업 ${noAudio.length}편 · 없는 소리 파일 ${missingAudioCount}개`);
+  try { linkResult = checkLinks(OUT, BASE, [['/admin/index.html (잠긴 본문)', fill(null)]]); } catch (e) { console.log(`링크 점검을 못 했습니다: ${e.message}`); }
+  if (ADMIN_PASSWORD) {
+    const salt = crypto.randomBytes(16), iv = crypto.randomBytes(12);
+    const key = crypto.pbkdf2Sync(Buffer.from(ADMIN_PASSWORD, 'utf8'), salt, ADMIN_KDF_ITER, 32, 'sha256');
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const plain = fill(linkResult);
+    const ct = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final(), cipher.getAuthTag()]);   /* 암호문 뒤에 인증 태그 16바이트 — WebCrypto 의 AES-GCM 꼴 */
+    const payload = JSON.stringify({ v: 1, kdf: 'PBKDF2-SHA256', iter: ADMIN_KDF_ITER, cipher: 'AES-256-GCM', salt: salt.toString('base64'), iv: iv.toString('base64'), ct: ct.toString('base64') });
+    const lockedPage = adminPage(`<div id="adm-lock">
+<p class="adm-meta">운영자용 요약입니다. 비밀번호를 넣어야 열립니다.</p>
+<form id="adm-form" class="adm-lock card" autocomplete="on">
+<label for="adm-pw">관리자 비밀번호</label>
+<div class="row"><input id="adm-pw" name="password" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" required aria-describedby="adm-err"><button class="btn" id="adm-open" type="submit">열기</button></div>
+<label class="chk"><input id="adm-rem" type="checkbox"> 이 기기에서 기억</label>
+<p class="adm-err" id="adm-err" role="alert" hidden></p>
+<p class="note">기억을 켜지 않으면 이 탭을 닫을 때까지만 열려 있어요. 켜면 이 기기에서 다음 배포 전까지 다시 묻지 않습니다(비밀번호가 아니라 풀이 열쇠만 저장). 같이 쓰는 기기에서는 켜지 마세요.</p>
+</form>
+<noscript><div class="adm-box warn"><b>자바스크립트가 꺼져 있어요</b><p>이 페이지는 브라우저에서 암호를 풀어 보여 주므로 자바스크립트가 필요합니다.</p></div></noscript>
+</div>
+<p class="adm-bar" id="adm-bar" hidden><button class="btn ghost sm" id="adm-lockbtn" type="button">잠그기</button></p>
+<div id="adm-root" hidden></div>
+<script type="application/json" id="adm-data">${payload}</script>`, `<script>${ADMIN_JS}\n${UNLOCK_JS}</script>`);
+    /* 평문이 새지 않았는지 — 본문에만 있는 표식이 내보낼 쪽에 보이면 빌드를 멈춘다 */
+    for (const mark of ['id="visitors"', 'id="lessons"', 'class="adm-stat', 'class="adm-tile']) if (lockedPage.includes(mark)) throw new Error(`/admin/ 잠긴 쪽에 평문이 섞였습니다(${mark}) — 내보내지 않습니다`);
+    write('/admin/index.html', lockedPage);
+  }
+  console.log(`관리 현황 /admin/ — ${ADMIN_PASSWORD ? `암호화함(AES-256-GCM · PBKDF2-SHA256 ${ADMIN_KDF_ITER.toLocaleString('en-US')}회)` : '비밀번호 없음(ADMIN_PASSWORD) → 닫힌 쪽만 내보냄'} · 방문자 자료 ${stats ? `있음(${stats.fetchedAt})` : '없음'} · 깨진 링크 ${linkResult ? linkResult.missing.size : '?'}개 · 소리 없는 수업 ${noAudio.length}편 · 없는 소리 파일 ${missingAudioCount}개`);
 }
 
 

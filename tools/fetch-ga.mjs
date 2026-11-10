@@ -93,7 +93,7 @@ async function main() {
   };
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, JSON.stringify(stats, null, 1) + '\n');
-  console.log(`[fetch-ga] ${path.relative(ROOT, OUT_FILE)} 에 썼습니다 — 날짜 ${stats.daily.length}일, 페이지 ${stats.pages.length}, 유입 ${stats.sources.length}, 기기 ${stats.devices.length} · 최근 30일 사용자 ${periods.last30.users}명 · 페이지뷰 ${periods.last30.pageviews}`);
+  console.log(`[fetch-ga] ${path.relative(ROOT, OUT_FILE)} 에 썼습니다 — 날짜 ${stats.daily.length}일, 페이지 ${stats.pages.length}, 유입 ${stats.sources.length}, 기기 ${stats.devices.length}`);   /* 숫자는 찍지 않는다 — 공개 저장소의 Actions 로그는 누구나 본다 */
 }
 
 main().catch((e) => soft(`방문자 자료를 받지 못했습니다 — ${String(e.message || e).slice(0, 300)} (기존 파일은 그대로 둡니다)`));

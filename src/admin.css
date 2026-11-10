@@ -83,3 +83,17 @@
 .adm-links span{display:block;font-size:12px;color:var(--dim);margin-top:2px}
 .adm-sub{font-size:13px;color:var(--dim);margin:12px 0 0;display:flex;flex-wrap:wrap;gap:4px 14px}
 @media(max-width:480px){.adm-list li{flex-direction:column-reverse;gap:0}}
+/* 잠금 — 비밀번호 칸·잠그기 단추 */
+.adm [hidden]{display:none!important}
+.adm-lock{padding:18px;max-width:440px;display:grid;gap:10px}
+.adm-lock>label{font-size:14px;font-weight:700}
+.adm-lock .row{display:flex;gap:8px}
+.adm-lock input[type=password]{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--line2);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
+.adm-lock input[aria-invalid=true]{border-color:var(--warn)}
+.adm-lock .btn{flex:0 0 auto;border-radius:8px}
+.adm-lock .btn:disabled{opacity:.6;cursor:default}
+.adm-lock .chk{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500;cursor:pointer}
+.adm-lock .chk input{width:18px;height:18px;margin:0;accent-color:var(--acc)}
+.adm-err{margin:0;font-size:14px;font-weight:600;color:var(--warn)}
+.adm-lock .note{margin:0}
+.adm-bar{display:flex;justify-content:flex-end;margin:-6px 0 8px}
