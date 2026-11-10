@@ -4,11 +4,15 @@
  * 2026-11-08 중국어·일본어 공부 사이트로 고침 — 홈(오늘의 수업), 과정 목차(/chinese-course/ /japanese-course/ 를 글 데이터로 생성),
  *   단어장(/vocabulary/), 가나표(/kana/), 병음표(/pinyin/), 생활정보 모음(/life/) 을 수업 글 본문에서 뽑아(tools/lessons.mjs) 빌드 때마다 만든다.
  * BASE_PATH=/daytip 처럼 주면 모든 루트 상대 주소 앞에 붙인다(테스트용 seonhaesoo.github.io/daytip/). canonical 은 늘 https://daytip.kr 이다.
- * 발행일이 아직 안 된 글(KST 기준 미래)은 빼고 만든다 — 목차에는 "N월 N일 공개" 로만 보인다. */
+ * 발행일이 아직 안 된 글(KST 기준 미래)은 빼고 만든다 — 목차에는 "N월 N일 공개" 로만 보인다.
+ * 2026-11-10 /admin/ 관리 현황(방문자·수업·글·바로가기) — 맨 끝에서 만든다. noindex·robots Disallow, 사이트맵·메뉴·바닥·피드에 없음.
+ *   방문자 숫자는 data/admin/stats.json (tools/fetch-ga.mjs 가 쓴다; STATS_FILE 로 다른 파일을 가리킬 수 있다) 이 있을 때만. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 import { LANGS, langOf, lessonDay, reviewRange, parseLesson, parseReview } from './lessons.mjs';
+import { checkLinks } from './check-links.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DATA = path.join(ROOT, 'data');
@@ -237,7 +241,7 @@ const analytics = PROD ? `<script async src="https://www.googletagmanager.com/gt
 <script async crossorigin="anonymous" src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE}&host=${ADSENSE_HOST}"></script>` : '';
 const lifeCatObjs = LIFE_CATS.map((id) => catById.get(id)).filter((c) => c && postsByCat.get(c.id).length);
 
-function shell({ path: p, title, description, body, type = 'website', image, jsonld, noindex = false, extraHead = '', extraFoot = '', nav = '', js = false }) {
+function shell({ path: p, title, description, body, type = 'website', image, jsonld, noindex = false, robots = '', ads = true, extraHead = '', extraFoot = '', nav = '', js = false }) {
   const full = p === '/' ? `${site.name} — 하루 한 마디 중국어·일본어` : `${title} - ${site.name}`;
   const img = image ? abs(image) : abs(ICON);
   return `<!doctype html>
@@ -247,7 +251,7 @@ function shell({ path: p, title, description, body, type = 'website', image, jso
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(full)}</title>
 <meta name="description" content="${esc(description)}">
-${noindex ? '<meta name="robots" content="noindex, follow">' : '<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">'}
+${robots ? `<meta name="robots" content="${robots}">` : noindex ? '<meta name="robots" content="noindex, follow">' : '<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">'}
 <link rel="canonical" href="${abs(p)}">
 <link rel="icon" href="${url(site.icon32)}" sizes="32x32">
 <link rel="icon" href="${url(ICON)}" sizes="192x192">
@@ -269,7 +273,7 @@ ${noindex ? '<meta name="robots" content="noindex, follow">' : '<meta name="robo
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>` : ''}
 <style>${CSS}</style>
 ${extraHead}
-${analytics}
+${ads ? analytics : ''}
 </head>
 <body>
 <header class="site-head"><div class="wrap">
@@ -622,7 +626,7 @@ ${soundLessons.length ? `<h2>발음 수업</h2><ul class="chart-links">${soundLe
 
 /* ---------- 404, robots, ads.txt, 사이트맵, RSS ---------- */
 write('/404.html', shell({ path: '/404.html', title: '페이지를 찾을 수 없습니다', description: '주소가 바뀌었거나 없는 페이지입니다.', noindex: true, body: `<div class="notfound"><h1>페이지를 찾을 수 없습니다</h1><p>주소가 바뀌었거나 없는 페이지입니다. <a href="${url('/')}">홈으로</a> 가거나 아래에서 찾아보세요.</p><p>${NAV.slice(1).map(([href, label]) => `<a href="${url(href)}">${label}</a>`).join(' · ')}</p></div>` }));
-write('/robots.txt', `User-agent: *\nAllow: /\n\nSitemap: ${abs('/sitemap.xml')}\n`);
+write('/robots.txt', `User-agent: *\nAllow: /\nDisallow: /admin/\n\nSitemap: ${abs('/sitemap.xml')}\n`);
 write('/ads.txt', 'google.com, pub-1562244199345682, DIRECT, f08c47fec0942fa0\n');
 const sm = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemap.map((u) => `<url><loc>${abs(u.loc)}</loc>${u.lastmod ? `<lastmod>${iso(u.lastmod)}</lastmod>` : ''}<priority>${u.priority}</priority></url>`).join('\n')}\n</urlset>\n`;
 write('/sitemap.xml', sm);
@@ -668,6 +672,205 @@ function copyDir(from, to) {
 }
 if (fs.existsSync(PUBLIC)) copyDir(PUBLIC, OUT);
 write('/.nojekyll', '');
+
+/* ---------- 관리 현황 (/admin/) ---------- */
+/* 운영자만 보는 페이지지만 정적 호스팅이라 주소를 알면 누구나 열 수 있다 — 비밀 값·메일·키는 절대 넣지 않는다.
+ * noindex,nofollow + robots.txt Disallow, 사이트맵·메뉴·바닥·피드에 넣지 않고, 통계·광고 스크립트도 붙이지 않는다.
+ * 업로드 파일 복사 뒤에 만든다: 다 만든 dist/ 를 check-links 로 훑어 깨진 링크 수를 적기 때문. */
+{
+  const num = (n) => Math.round(+n || 0).toLocaleString('ko-KR');
+  const addDays = (d, n) => new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) + n * 86400000).toISOString().slice(0, 10);
+  const wd = (d) => '일월화수목금토'[new Date(d.slice(0, 10) + 'T00:00:00Z').getUTCDay()];
+  const fmtDay = (d) => `${fmtMD(d)}(${wd(d)})`;
+  const lessonLabel = (p) => { const l = langOf(p); if (!l) return ''; const r = reviewRange(p); const d = lessonDay(p); return `${LANGS[l].name} ${r ? `${r[0]}~${r[1]}일차 복습` : d ? `${d}일차` : '수업'}`; };
+  const ext = (href, label, sub) => `<a href="${href}" target="_blank" rel="noopener noreferrer"><b>${label}</b><span>${sub}</span></a>`;
+
+  /* ----- 1. 방문자 ----- */
+  const STATS_SRC = process.env.STATS_FILE || path.join(DATA, 'admin', 'stats.json');
+  let stats = null, fetchedMs = NaN;
+  try { if (fs.existsSync(STATS_SRC)) { const j = JSON.parse(fs.readFileSync(STATS_SRC, 'utf8')); fetchedMs = Date.parse(j?.fetchedAt); if (j && Array.isArray(j.daily) && !Number.isNaN(fetchedMs)) stats = j; else console.log('방문자 자료(stats.json)의 꼴이 달라 건너뜁니다'); } } catch (e) { console.log(`방문자 자료(stats.json)를 읽지 못해 건너뜁니다: ${e.message}`); }
+  if (stats) write('/admin/stats.json', JSON.stringify(stats)); else fs.rmSync(path.join(OUT, 'admin', 'stats.json'), { force: true });
+  let vHtml, fetched = '';
+  if (!stats) {
+    vHtml = `<div class="adm-box"><b>아직 방문자 자료가 없어요</b><p>저장소 Secrets 에 <code>GA_KEY_JSON</code>·<code>GA_PROPERTY_ID</code> 를 넣으면 다음 배포부터 여기에 어제·최근 7일·최근 30일 숫자가 나옵니다. 넣는 법은 README 의 “방문자 자료” 를 보세요. 그 전에는 아래 바로가기의 구글 애널리틱스에서 확인하세요.</p></div>`;
+  } else {
+    const fetchedKst = new Date(fetchedMs + 9 * 3600 * 1000).toISOString();
+    fetched = fetchedKst;
+    const stale = Date.now() - fetchedMs > 2 * 86400000;
+    const endDay = addDays(fetchedKst.slice(0, 10), -1);   /* 어제 — 오늘은 집계 중이라 받지 않는다 */
+    const byDate = new Map(stats.daily.filter((d) => /^\d{4}-\d\d-\d\d$/.test(d?.date || '')).map((d) => [d.date, d]));
+    const series = Array.from({ length: 30 }, (_, i) => { const date = addDays(endDay, i - 29); const d = byDate.get(date) || {}; return { date, users: +d.users || 0, pageviews: +d.pageviews || 0 }; });
+    const sumDays = (from, to, k) => { let s = 0; for (let i = from; i <= to; i++) s += +byDate.get(addDays(endDay, -i))?.[k] || 0; return s; };
+    /* 기간 합계는 GA 가 따로 센 값(periods)을 쓴다. 없으면 날짜별로 더한다 — 그때 방문자는 여러 날 온 사람이 겹쳐 세어진다 */
+    const exact = !!stats.periods?.last30;
+    const period = (name, a, b) => { const p = stats.periods?.[name]; return p ? { users: +p.users || 0, pageviews: +p.pageviews || 0 } : { users: sumDays(a, b, 'users'), pageviews: sumDays(a, b, 'pageviews') }; };
+    const delta = (cur, prev, than) => {
+      if (!prev) return `<dd class="dl">${than} 자료 없음</dd>`;
+      const r = Math.round((cur - prev) / prev * 100);
+      return r === 0 ? `<dd class="dl">${than}과 비슷</dd>` : `<dd class="dl ${r > 0 ? 'up' : 'down'}">${r > 0 ? '▲' : '▼'} ${num(Math.abs(r))}% <span class="visually-hidden">${r > 0 ? '늘었어요' : '줄었어요'}</span>· ${than} ${num(prev)}</dd>`;
+    };
+    const tile = (label, range, cur, prev, than) => `<div class="adm-tile card"><div class="lb">${label}<span>${range}</span></div><dl><dt>방문자</dt><dd>${num(cur.users)}</dd>${delta(cur.users, prev.users, than)}<dt>페이지뷰</dt><dd>${num(cur.pageviews)}</dd>${delta(cur.pageviews, prev.pageviews, than)}</dl></div>`;
+    const tiles = [
+      tile('어제', fmtDay(endDay), period('yesterday', 0, 0), period('yesterdayPrev', 1, 1), '그 전날'),
+      tile('최근 7일', `${fmtMD(addDays(endDay, -6))}~${fmtMD(endDay)}`, period('last7', 0, 6), period('prev7', 7, 13), '앞선 7일'),
+      tile('최근 30일', `${fmtMD(addDays(endDay, -29))}~${fmtMD(endDay)}`, period('last30', 0, 29), period('prev30', 30, 59), '앞선 30일'),
+    ].join('');
+    /* 날짜별 막대 — 값 하나씩 두 장(방문자·페이지뷰). 눈금이 다른 두 값을 한 축에 겹치지 않는다. 막대를 누르면 아래 줄에 그날 숫자 */
+    const chart = (key, label, unit) => {
+      const max = Math.max(1, ...series.map((d) => d[key])); const total = series.reduce((s, d) => s + d[key], 0);
+      const W = 10, H = 100;
+      const bars = series.map((d, i) => {
+        const h = d[key] ? Math.max(2, d[key] / max * (H - 2)) : 0; const x = i * W + 1, w = W - 2, y = H - h, r = Math.min(1.5, h);
+        const t = `${fmtDay(d.date)} · 방문자 ${num(d.users)}명 · 페이지뷰 ${num(d.pageviews)}`;
+        return `<g data-t="${esc(t)}"><title>${esc(t)}</title><rect class="h" x="${i * W}" y="0" width="${W}" height="${H}"/>${h ? `<path class="b" d="M${x},${H}V${(y + r).toFixed(1)}Q${x},${y.toFixed(1)} ${x + r},${y.toFixed(1)}H${x + w - r}Q${x + w},${y.toFixed(1)} ${x + w},${(y + r).toFixed(1)}V${H}Z"/>` : ''}</g>`;
+      }).join('');
+      const read = key === 'pageviews' ? `30일 합계 ${num(total)}${unit} · 하루 평균 ${num(total / 30)}${unit}` : `하루 평균 ${num(total / 30)}${unit}`;
+      return `<figure class="adm-chart card"><figcaption>${label}<small>점선 = 가장 많은 날 ${num(max)}${unit}</small></figcaption><div class="plot"><svg viewBox="0 0 ${W * 30} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(`최근 30일 ${label} 막대그래프. ${read}. 날짜별 숫자는 아래 표에 있습니다.`)}">${bars}</svg></div><div class="ax"><span>${fmtMD(series[0].date)}</span><span>${fmtMD(series[15].date)}</span><span>${fmtMD(series[29].date)}</span></div><p class="read" data-default="${esc(read)}">${read}</p></figure>`;
+    };
+    /* 많이 본 페이지 — 주소를 글 제목으로 푼다. dist/ 에 실제로 있는 주소만 링크를 건다(옛 주소·오타 주소는 글자로만) */
+    const titleByPath = new Map([['/', '홈'], ['/vocabulary/', '단어장'], ['/vocabulary/chinese/', '중국어 단어장'], ['/vocabulary/japanese/', '일본어 단어장'], ['/kana/', '히라가나·가타카나 표'], ['/pinyin/', '병음·성조표'], ['/life/', '생활정보'], ['/admin/', '관리 현황'], ['/chinese-course/', '중국어 과정 목차'], ['/japanese-course/', '일본어 과정 목차']]);
+    for (const c of liveCats) titleByPath.set(catPath(c), `${catName(c)} 글 목록`);
+    for (const p of pages) if (!titleByPath.has(`/${p.slug}/`)) titleByPath.set(`/${p.slug}/`, text(p.title));
+    for (const p of posts) titleByPath.set(`/${p.slug}/`, text(p.title));
+    const normPath = (raw) => { let p = String(raw || '/').split('?')[0].split('#')[0]; try { p = decodeURIComponent(p); } catch { /* 그대로 */ } if (!p.startsWith('/')) p = '/' + p; if (!p.endsWith('/') && !/\.[a-z0-9]+$/i.test(p)) p += '/'; return p; };
+    const safePath = (p) => !p.includes('..') && !/[<>"\\]/.test(p);
+    const pageRows = (stats.pages || []).slice(0, 20).map((r, i) => {
+      const p = normPath(r.path); const title = titleByPath.get(p);
+      const live = safePath(p) && p.endsWith('/') && fs.existsSync(path.join(OUT, p, 'index.html'));
+      const name = esc(title || p);
+      return `<tr><td><span class="rk">${i + 1}</span>${live ? `<a href="${url(encodeURI(p))}">${name}</a>` : name}<span class="p">${title ? esc(p) : live ? '' : '지금은 없는 주소'}</span></td><td class="n">${num(r.pageviews)}</td><td class="n">${num(r.users)}</td></tr>`;
+    }).join('');
+    const SRC_NAME = { '(direct)': '직접 방문', naver: '네이버', 'm.naver.com': '네이버(모바일)', 'search.naver.com': '네이버 검색', 'm.search.naver.com': '네이버 검색(모바일)', 'blog.naver.com': '네이버 블로그', 'm.blog.naver.com': '네이버 블로그(모바일)', google: '구글', daum: '다음', 'search.daum.net': '다음 검색', bing: '빙', yahoo: '야후', '(not set)': '알 수 없음' };
+    const MED_NAME = { organic: '검색', referral: '링크', '(none)': '', '(not set)': '', social: '소셜', cpc: '광고', email: '메일' };
+    const share = (v, total) => { const pct = total ? Math.round(v / total * 100) : 0; return `<span class="adm-share" role="img" aria-label="${pct}%"><i style="width:${Math.min(100, pct)}%"></i></span>`; };
+    const srcList = (stats.sources || []).slice(0, 10);
+    const srcTotal = +stats.periods?.last30?.sessions || srcList.reduce((s, r) => s + (+r.sessions || 0), 0);
+    const srcRows = srcList.map((r) => { const m = MED_NAME[r.medium] ?? r.medium; return `<tr><td>${esc(SRC_NAME[r.source] || r.source)}${m ? ` <span class="rk">${esc(m)}</span>` : ''}${share(+r.sessions || 0, srcTotal)}</td><td class="n">${num(r.sessions)}</td><td class="n">${srcTotal ? Math.round((+r.sessions || 0) / srcTotal * 100) : 0}%</td></tr>`; }).join('');
+    const DEV_NAME = { mobile: '휴대폰', desktop: 'PC', tablet: '태블릿', 'smart tv': 'TV' };
+    const devList = stats.devices || []; const devTotal = devList.reduce((s, r) => s + (+r.users || 0), 0);
+    const devRows = devList.map((r) => `<tr><td>${esc(DEV_NAME[r.device] || r.device)}${share(+r.users || 0, devTotal)}</td><td class="n">${num(r.users)}</td><td class="n">${devTotal ? Math.round((+r.users || 0) / devTotal * 100) : 0}%</td></tr>`).join('');
+    vHtml = `<div class="adm-box warn js-stale"${stale ? '' : ' hidden'}><b>방문자 자료가 오래됐어요</b><p>마지막 갱신 ${fmtDate(fetchedKst)} ${fetchedKst.slice(11, 16)} — 이틀 넘게 새로 받지 못했습니다. GitHub Actions 의 “Fetch visitor stats” 단계와 서비스 계정 권한을 확인하세요. 아래 숫자는 그때 것입니다.</p></div>
+<div class="adm-tiles">${tiles}</div>
+<p class="note">방문자 = 활성 사용자${exact ? '' : ' (날짜별로 더한 값이라 여러 날 온 사람은 겹쳐 세었어요)'}. 오늘은 집계 중이라 어제까지만 셉니다.</p>
+<div class="adm-charts">${chart('users', '하루 방문자', '명')}${chart('pageviews', '하루 페이지뷰', '회')}</div>
+<details><summary>날짜별 숫자 표로 보기</summary><div class="adm-scroll"><table><thead><tr><th>날짜</th><th class="n">방문자</th><th class="n">페이지뷰</th></tr></thead><tbody>${series.slice().reverse().map((d) => `<tr><td>${fmtDay(d.date)}</td><td class="n">${num(d.users)}</td><td class="n">${num(d.pageviews)}</td></tr>`).join('')}</tbody></table></div></details>
+<h3>많이 본 페이지<small>최근 30일</small></h3>
+${pageRows ? `<div class="adm-scroll"><table><thead><tr><th>페이지</th><th class="n">페이지뷰</th><th class="n">방문자</th></tr></thead><tbody>${pageRows}</tbody></table></div>` : '<p class="note">자료가 없어요.</p>'}
+<div class="adm-two"><div><h3>어디서 왔나<small>최근 30일 · 방문(세션)</small></h3>
+${srcRows ? `<table><thead><tr><th>유입</th><th class="n">방문</th><th class="n">비중</th></tr></thead><tbody>${srcRows}</tbody></table>` : '<p class="note">자료가 없어요.</p>'}</div>
+${devRows ? `<div><h3>기기<small>최근 30일 · 방문자</small></h3><table><thead><tr><th>기기</th><th class="n">방문자</th><th class="n">비중</th></tr></thead><tbody>${devRows}</tbody></table></div>` : ''}</div>`;
+  }
+
+  /* ----- 2. 수업 현황 ----- */
+  const byDateAsc = (a, b) => (a.post.date < b.post.date ? -1 : 1);
+  /* 소리 점검: 수업·복습 글(공개+예약)의 <audio>/<source> src 가 public/ 에 있는지 */
+  const audit = [];
+  for (const p of [...posts, ...futurePosts]) {
+    if (!langOf(p)) continue;
+    const srcs = [...p.content.matchAll(/<(?:audio|source)\b[^>]*\ssrc="([^"]+)"/g)].map((m) => decode(m[1]).replace(/^https?:\/\/daytip\.kr/, '').split('?')[0]);
+    const missing = [...new Set(srcs)].filter((s) => s.startsWith('/wp-content/uploads/') && !uploadExists(s));
+    audit.push({ post: p, future: p.date > nowKst, count: srcs.length, missing });
+  }
+  const noAudio = audit.filter((a) => !a.count).sort(byDateAsc);
+  const missingAudio = audit.filter((a) => a.missing.length).sort(byDateAsc);
+  const missingAudioCount = missingAudio.reduce((s, a) => s + a.missing.length, 0);
+  const audioFiles = audit.reduce((s, a) => s + a.count, 0);
+  const postRef = (a) => `<span class="x">${a.future ? a.post.title : `<a href="${url(`/${a.post.slug}/`)}">${a.post.title}</a>`}<small>${lessonLabel(a.post)} · ${a.future ? `${fmtMD(a.post.date)} 공개 예정` : fmtDate(a.post.date)}</small></span>`;
+  const langCard = (lang) => {
+    const L = LANGS[lang]; const latest = latestLesson(lang); const sch = scheduled[lang].slice().sort(byDateAsc);
+    const days = new Set([...lessons[lang], ...scheduled[lang]].map((x) => x.day)); const maxDay = Math.max(0, ...days);
+    const gaps = []; for (let d = 1; d <= maxDay; d++) if (!days.has(d)) gaps.push(d);
+    const last = sch[sch.length - 1];
+    return `<div class="adm-card card ${lang}"><p class="kicker">${langTag(lang)}<span>공개 ${lessons[lang].length}편 · 예약 ${sch.length}편</span></p>
+${latest ? `<a class="t" href="${url(`/${latest.post.slug}/`)}">${latest.post.title}</a><p class="d">최신 공개 · ${latest.day}일차 · ${fmtDate(latest.post.date)}(${wd(latest.post.date)})</p>` : '<p class="d">아직 공개된 수업이 없어요.</p>'}
+<h4>다음 예약</h4>
+${sch.length ? `<ul class="adm-list">${sch.slice(0, 5).map((x) => `<li><span class="x">${x.post.title}</span><span class="w">${fmtDay(x.post.date)} ${x.post.date.slice(11, 16)}</span></li>`).join('')}</ul>${sch.length > 5 ? `<p class="d">그 뒤로 ${sch.length - 5}편 더 — 마지막은 ${last.day}일차, ${fmtDay(last.post.date)}</p>` : ''}` : '<p class="d">예약된 수업이 없어요. 새 글을 올려야 다음 수업이 나옵니다.</p>'}
+${gaps.length ? `<p class="d">빠진 일차: ${gaps.join(', ')}일차 (공개·예약 어디에도 없어요)</p>` : ''}
+<p class="d"><a href="${url(L.hub)}">${L.name} 과정 목차 →</a></p></div>`;
+  };
+  const allReviews = [...reviews.zh, ...reviews.ja].sort((a, b) => (a.post.date < b.post.date ? 1 : -1));
+  const soonReviews = [...scheduledReviews.zh, ...scheduledReviews.ja].sort(byDateAsc);
+  const vz = vocab.filter((v) => v.lang === 'zh').length, vj = vocab.length - vz;
+  const lessonsHtml = `<div class="adm-cards">${langCard('zh')}${langCard('ja')}</div>
+<div class="adm-stats" style="margin-top:12px">
+<div class="adm-stat card"><div class="lb">단어장</div><div class="val">${num(vocab.length)}<small>개</small></div><div class="s">중국어 ${num(vz)} · 일본어 ${num(vj)} · 녹음 있는 낱말 ${num(vocab.filter((v) => v.audio).length)}</div></div>
+<div class="adm-stat card"><div class="lb">복습 글</div><div class="val">${allReviews.length}<small>편</small></div><div class="s">중국어 ${reviews.zh.length} · 일본어 ${reviews.ja.length}${soonReviews.length ? ` · 예약 ${soonReviews.length}` : ''}</div></div>
+<div class="adm-stat card ${noAudio.length ? 'bad' : 'good'}"><div class="lb">소리 없는 수업</div><div class="val">${noAudio.length}<small>편</small></div><div class="s">본문에 소리가 하나도 없는 수업·복습 글</div></div>
+<div class="adm-stat card ${missingAudioCount ? 'bad' : 'good'}"><div class="lb">파일이 없는 소리</div><div class="val">${missingAudioCount}<small>개</small></div><div class="s">본문 소리 ${num(audioFiles)}개 가운데 파일이 빠진 것</div></div>
+</div>
+${noAudio.length ? `<h3>소리 없는 수업<small>${noAudio.length}편</small></h3><ul class="adm-list">${noAudio.map((a) => `<li>${postRef(a)}</li>`).join('')}</ul>` : ''}
+${missingAudio.length ? `<h3>파일이 없는 소리<small>${missingAudio.length}편</small></h3><ul class="adm-list">${missingAudio.map((a) => `<li><span class="x">${a.future ? a.post.title : `<a href="${url(`/${a.post.slug}/`)}">${a.post.title}</a>`}<small>${a.missing.map(esc).join('<br>')}</small></span></li>`).join('')}</ul>` : ''}
+${allReviews.length || soonReviews.length ? `<h3>복습 글<small>최신순</small></h3><ul class="adm-list">${soonReviews.map((r) => `<li><span class="x">${r.post.title}</span><span class="w">${fmtDay(r.post.date)} 공개 예정</span></li>`).join('')}${allReviews.map((r) => `<li><span class="x"><a href="${url(`/${r.post.slug}/`)}">${r.post.title}</a></span><span class="w">${fmtMD(r.post.date)}</span></li>`).join('')}</ul>` : ''}
+${unparsed.length ? `<p class="note">구조를 못 읽은 수업 글 ${unparsed.length}편: ${unparsed.map(esc).join(', ')}</p>` : ''}`;
+
+  /* ----- 3. 글 현황 ----- */
+  const isStudy = (p) => !!langOf(p) || p.categories.includes(23);
+  const groups = [['학습', posts.filter(isStudy)], ['읽을거리', posts.filter((p) => !isStudy(p) && isWorld(p))], ['생활정보', posts.filter((p) => !isStudy(p) && !isWorld(p) && isLife(p))]];
+  const etc = posts.length - groups.reduce((s, g) => s + g[1].length, 0);
+  const since = (n) => posts.filter((p) => p.date.slice(0, 10) > addDays(BUILD_DATE, -n)).length;
+  const otherFuture = futurePosts.filter((p) => !langOf(p));
+  let sha = (process.env.GITHUB_SHA || '').trim().slice(0, 7);
+  if (!sha) { try { sha = execSync('git rev-parse --short HEAD', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { sha = ''; } }
+  if (!/^[0-9a-f]{7,12}$/.test(sha)) sha = '';
+  const REPO = 'https://github.com/Seonhaesoo/daytip';
+  const LINK_SLOT = '<!--adm:links-->';
+  const linkStat = (r) => r ? `<div class="adm-stat card ${r.missing.size ? 'bad' : 'good'}"><div class="lb">깨진 링크</div><div class="val">${num(r.missing.size)}<small>개</small></div><div class="s">HTML ${num(r.htmls)}장 · 주소 ${num(r.checked)}개 점검</div></div>` : `<div class="adm-stat card"><div class="lb">깨진 링크</div><div class="val">–</div><div class="s">점검하지 못했어요</div></div>`;
+  const LINK_LIST_SLOT = '<!--adm:link-list-->';
+  const linkList = (r) => r && r.missing.size ? `<h3>깨진 링크<small>${r.missing.size > 20 ? `앞 20개 / ${num(r.missing.size)}개` : `${r.missing.size}개`}</small></h3><ul class="adm-list">${[...r.missing].slice(0, 20).map(([u, page]) => `<li><span class="x">${esc(u)}<small>← ${esc(page)}</small></span></li>`).join('')}</ul>` : '';
+  const groupSub = { 학습: `중국어 ${posts.filter((p) => langOf(p) === 'zh').length} · 일본어 ${posts.filter((p) => langOf(p) === 'ja').length}`, 읽을거리: '일본·중국 이야기', 생활정보: '지원금·법률·부동산·명절' };
+  const postsHtml = `<div class="adm-stats">
+<div class="adm-stat card"><div class="lb">공개된 글</div><div class="val">${num(posts.length)}<small>편</small></div><div class="s">예약 ${futurePosts.length}편${otherFuture.length ? ` (수업 말고 ${otherFuture.length}편)` : ''}</div></div>
+${groups.map(([name, arr]) => `<div class="adm-stat card"><div class="lb">${name}</div><div class="val">${num(arr.length)}<small>편</small></div><div class="s">${groupSub[name]}</div></div>`).join('')}
+<div class="adm-stat card"><div class="lb">최근 7일 발행</div><div class="val">${since(7)}<small>편</small></div><div class="s">${fmtMD(addDays(BUILD_DATE, -6))}부터</div></div>
+<div class="adm-stat card"><div class="lb">최근 30일 발행</div><div class="val">${since(30)}<small>편</small></div><div class="s">${fmtMD(addDays(BUILD_DATE, -29))}부터</div></div>
+${LINK_SLOT}
+<div class="adm-stat card ${missingRefs.size ? 'bad' : 'good'}"><div class="lb">없는 업로드 파일</div><div class="val">${num(missingRefs.size)}<small>개</small></div><div class="s">본문이 가리키는데 저장소에 없는 그림·소리</div></div>
+</div>
+${etc ? `<p class="note">어느 묶음에도 안 드는 글 ${etc}편.</p>` : ''}
+${LINK_LIST_SLOT}
+<h3>최근 올라온 글<small>10편</small></h3>
+<ul class="adm-list">${posts.slice(0, 10).map((p) => `<li><span class="x"><a href="${url(`/${p.slug}/`)}">${p.title}</a><small>${lessonLabel(p) || esc(primaryCat(p) ? catName(primaryCat(p)) : '분류 없음')}</small></span><span class="w">${fmtDay(p.date)}</span></li>`).join('')}</ul>
+<p class="adm-sub"><span>빌드 ${fmtDate(nowKst)} ${nowKst.slice(11, 16)} (한국 시간)</span>${sha ? `<span>커밋 <a href="${REPO}/commit/${sha}" target="_blank" rel="noopener noreferrer"><code>${sha}</code></a></span>` : '<span>커밋 정보 없음</span>'}${BASE ? `<span>BASE_PATH ${esc(BASE)}</span>` : ''}</p>`;
+
+  /* ----- 4. 바로가기 ----- */
+  const linksHtml = `<div class="adm-links">
+${ext('https://search.google.com/search-console?resource_id=sc-domain:daytip.kr', '구글 서치 콘솔', '검색 노출·색인')}
+${ext('https://analytics.google.com/', '구글 애널리틱스', '방문자 자세히')}
+${ext('https://searchadvisor.naver.com/console/board', '네이버 서치어드바이저', '네이버 수집·노출')}
+${ext(`${REPO}/actions`, 'GitHub Actions', '빌드·배포 기록')}
+${ext(REPO, '저장소', 'Seonhaesoo/daytip')}
+${ext('https://adsense.google.com/', '애드센스', '수익·광고 상태')}
+</div>
+<p class="adm-sub"><a href="${url('/sitemap.xml')}">사이트맵</a><a href="${url('/feed/')}">RSS</a><a href="${url('/robots.txt')}">robots.txt</a><a href="${url('/ads.txt')}">ads.txt</a></p>`;
+
+  const ADMIN_JS = `(function(){var v=document.querySelector('[data-fetched]');if(v){var t=Date.parse(v.getAttribute('data-fetched')),a=Date.now()-t,e=document.querySelector('.js-age'),s=document.querySelector('.js-stale');if(!isNaN(t)){var h=Math.floor(a/36e5);if(e)e.textContent=' ('+(h<1?'방금 전':h<48?h+'시간 전':Math.floor(h/24)+'일 전')+')';if(s)s.hidden=a<=1728e5}}
+document.querySelectorAll('.adm-chart').forEach(function(c){var r=c.querySelector('.read'),d=r.getAttribute('data-default'),on=null;function set(g){if(on)on.classList.remove('on');on=g;if(g){g.classList.add('on');r.textContent=g.getAttribute('data-t')}else r.textContent=d}
+c.addEventListener('pointerover',function(e){var g=e.target.closest('g[data-t]');if(g)set(g)});c.addEventListener('click',function(e){var g=e.target.closest('g[data-t]');if(g)set(g)});c.addEventListener('pointerleave',function(e){if(e.pointerType==='mouse')set(null)})})})();`;
+  const body = `<article class="adm">
+<p class="crumb"><a href="${url('/')}">홈</a><span>›</span>관리</p>
+<h1 class="title">관리 현황</h1>
+<p class="adm-meta">운영자용 요약입니다. 검색에는 안 나오게 해 두었지만 주소를 아는 사람은 누구나 볼 수 있어서, 비밀 값은 여기에 두지 않습니다. 배포할 때마다(매일 아침) 새로 만들어집니다.</p>
+<nav class="adm-jump" aria-label="이 페이지 안"><a href="#visitors">방문자</a><a href="#lessons">수업</a><a href="#posts">글</a><a href="#links">바로가기</a></nav>
+<section class="sec" id="visitors"><h2>방문자${fetched ? `<small data-fetched="${fetched.slice(0, 19)}+09:00">마지막 갱신 ${fmtMD(fetched)} ${fetched.slice(11, 16)}<span class="js-age"></span></small>` : ''}</h2>
+${vHtml}</section>
+<section class="sec" id="lessons"><h2>수업 현황</h2>
+${lessonsHtml}</section>
+<section class="sec" id="posts"><h2>글 현황</h2>
+${postsHtml}</section>
+<section class="sec" id="links"><h2>바로가기</h2>
+${linksHtml}</section>
+</article>`;
+  const adminCss = fs.readFileSync(path.join(SRC, 'admin.css'), 'utf8').replace(/\n+/g, '\n');
+  const page = shell({ path: '/admin/', title: '관리 현황', description: '데이팁 운영자용 현황 페이지.', body, robots: 'noindex,nofollow', ads: false, extraHead: `<style>${adminCss}</style>`, extraFoot: `<script>${ADMIN_JS}</script>` });
+  const fill = (r) => page.replace(LINK_SLOT, () => linkStat(r)).replace(LINK_LIST_SLOT, () => linkList(r));
+  write('/admin/index.html', fill(null));
+  /* 방금 쓴 /admin/ 까지 포함해 dist/ 전체를 점검하고, 그 수를 채워 다시 쓴다 */
+  let linkResult = null;
+  try { linkResult = checkLinks(OUT, BASE); } catch (e) { console.log(`링크 점검을 못 했습니다: ${e.message}`); }
+  write('/admin/index.html', fill(linkResult));
+  console.log(`관리 현황 /admin/ — 방문자 자료 ${stats ? `있음(${stats.fetchedAt})` : '없음'} · 깨진 링크 ${linkResult ? linkResult.missing.size : '?'}개 · 소리 없는 수업 ${noAudio.length}편 · 없는 소리 파일 ${missingAudioCount}개`);
+}
+
 
 const missing = [...missingRefs].sort();
 fs.writeFileSync(path.join(DATA, 'build-missing.json'), JSON.stringify(missing, null, 1));
