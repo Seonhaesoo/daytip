@@ -54,3 +54,6 @@ jobs:
           path: dist
       - id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          # 사이트가 260MB 남짓이라(음원·그림) 기본 10분 안에 파일 동기화가 안 끝날 때가 있다 — 2026-11-10 두 번 연달아 시간 초과
+          timeout: 1800000
