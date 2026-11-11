@@ -551,20 +551,18 @@ const YOON = ['きゃ きゅ きょ|kya kyu kyo|캬 큐 쿄', 'しゃ しゅ し
 const toKata = (s) => [...s].map((ch) => { const c = ch.codePointAt(0); return c >= 0x3041 && c <= 0x3096 ? String.fromCodePoint(c + 0x60) : ch; }).join('');
 function kanaCell(kana, romaji, hangul) {
   if (kana === '_') return '<span class="gap" aria-hidden="true"></span>';
-  const rec = recordings.ja.get(kana);
+  // 2026-11-11 — 모든 글자를 기계 음성 하나로. 수업 녹음(14자)과 기계 음성이 섞이면 목소리가 달라 이질감이 크다(사용자 의견)
   const inner = `<span class="k" lang="ja">${kana}</span><small>${romaji}</small><small>${hangul}</small>`;
-  if (rec) return `<a class="kana rec" href="${url(rec.audio)}" data-src="${url(rec.audio)}" title="${esc(`${rec.day}일차 수업 녹음 (${rec.word})`)}">${inner}</a>`;
   return `<button type="button" class="kana" data-say="${kana}" data-lang="ja-JP" title="기계 음성">${inner}</button>`;
 }
 function kanaGrid(rows, kata, cls = '') {
   return `<div class="kana-grid ${cls}">${rows.map((r) => { const [k, ro, ha] = r.split('|'); const ks = k.includes(' ') ? k.split(' ') : [...k]; const ros = ro.split(' '), has = ha.split(' '); return ks.map((ch, i) => kanaCell(kata ? toKata(ch) : ch, ros[i], has[i])).join(''); }).join('')}</div>`;
 }
 {
-  const recList = [...new Set([...recordings.ja.values()])].sort((a, b) => a.day - b.day);
   const kanaLessons = lessons.ja.filter((x) => /히라가나|가타카나|탁음|요음|촉음|장음/.test(text(x.post.title)));
   const body = `<article class="chart"><p class="crumb"><a href="${url('/')}">홈</a><span>›</span>가나표</p><h1 class="title">히라가나·가타카나 표</h1>
-<p class="lead chart-intro">글자를 누르면 소리가 납니다. 수업에서 그 글자 하나를 따로 읽은 녹음이 있으면 그 녹음(${recList.length ? recList.map((r) => `${r.word}`).join(' ') : '없음'})을 쓰고, 나머지는 브라우저의 일본어 <b>기계 음성</b>으로 읽어 줍니다 — 기계 음성은 기기에 따라 억양이 다르니 참고만 하세요. 낱말 단위 원어민 발음은 <a href="${url('/vocabulary/japanese/')}">일본어 단어장</a>에 있습니다.</p>
-<div class="legend"><span class="kana rec" style="min-height:0;padding:2px 8px;pointer-events:none"><span class="k" style="font-size:16px">あ</span></span>초록 점 = 수업 녹음 · <span class="kana" style="min-height:0;padding:2px 8px;pointer-events:none"><span class="k" style="font-size:16px">か</span></span>점 없음 = 기계 음성 · 로마자 · 한국어 읽기(가까운 소리)</div>
+<p class="lead chart-intro">글자를 누르면 브라우저의 일본어 <b>기계 음성</b>으로 읽어 줍니다 — 모든 글자를 같은 목소리로 들을 수 있게 했어요. 기계 음성은 기기에 따라 억양이 조금씩 다르니 참고만 하세요. 낱말 단위 발음은 <a href="${url('/vocabulary/japanese/')}">일본어 단어장</a>에 있습니다.</p>
+<div class="legend">글자 아래는 로마자 · 한국어 읽기(가까운 소리)</div>
 <p class="tts-note" hidden></p>
 <h2 id="hiragana">히라가나 ひらがな</h2>
 <h3>청음 — 기본 46자</h3>${kanaGrid(GOJUON, false)}
@@ -580,7 +578,7 @@ function kanaGrid(rows, kata, cls = '') {
 <li>가타카나의 긴 소리는 ー 한 글자로 적습니다(コーヒー). 촉음 っ·ッ 는 한 박자 쉬는 받침입니다.</li>
 ${kanaLessons.length ? `<li>글자별 자세한 설명은 수업에서: ${kanaLessons.map((x) => `<a href="${url(`/${x.post.slug}/`)}">${x.day}일차</a>`).join(' · ')}</li>` : ''}
 </ul></article>`;
-  const description = '히라가나·가타카나 오십음도 — 글자를 누르면 소리가 납니다. 수업 녹음이 있는 글자는 녹음으로, 나머지는 기계 음성으로.';
+  const description = '히라가나·가타카나 오십음도 — 글자를 누르면 일본어 기계 음성으로 소리가 납니다. 로마자와 한국어 읽기를 함께.';
   write('/kana/index.html', shell({ path: '/kana/', title: '히라가나·가타카나 표', description, body, nav: '/kana/', js: true, jsonld: { '@context': 'https://schema.org', '@type': 'WebPage', name: '히라가나·가타카나 표', description, url: abs('/kana/'), inLanguage: 'ko', publisher } }));
   sitemap.push({ loc: '/kana/', lastmod: lessons.ja.map((x) => x.post.date).sort().pop(), priority: '0.7' });
 }
@@ -632,6 +630,7 @@ write('/ads.txt', 'google.com, pub-1562244199345682, DIRECT, f08c47fec0942fa0\n'
 const sm = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemap.map((u) => `<url><loc>${abs(u.loc)}</loc>${u.lastmod ? `<lastmod>${iso(u.lastmod)}</lastmod>` : ''}<priority>${u.priority}</priority></url>`).join('\n')}\n</urlset>\n`;
 write('/sitemap.xml', sm);
 write('/sitemaps.xml', sm);   /* 워드프레스 robots.txt 가 가리키던 이름 */
+write('/wp-sitemap.xml', sm); /* 워드프레스 때 서치콘솔에 제출해 둔 이름 — 없으면 "사이트맵 오류"가 뜬다(2026-11-11) */
 /* RSS 본문은 어디서 읽을지 모르니 절대 주소로. 테마 클래스는 RSS 리더에 의미가 없어 인라인 스타일 그대로 */
 const BASE_RE = new RegExp(`(src|href)="${BASE.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}/(?!/)`, 'g');
 const absolutize = (h) => h.replace(BASE_RE, `$1="${SITE}/`);
