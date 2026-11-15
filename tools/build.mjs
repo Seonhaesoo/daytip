@@ -65,6 +65,7 @@ const posts = publishable
   .filter((p) => { if (p.date > nowKst) { skippedFuture.push(p.slug); return false; } return true; })
   .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 const futurePosts = publishable.filter((p) => p.date > nowKst).sort((a, b) => (a.date < b.date ? -1 : 1));   /* 예약 글 — 목차에 "공개 예정" 으로만 */
+const futureSlugs = new Set(futurePosts.map((p) => p.slug));
 const pages = pagesAll.filter((p) => (p.status || 'publish') === 'publish');
 const BUILD_DATE = nowKst.slice(0, 10);
 
@@ -202,6 +203,8 @@ function cleanHtml(html, { theme = true } = {}) {
   let h = String(html ?? '');
   /* /?p=ID → /slug/ (목차 페이지가 예약 글을 ID 로 가리킨다) */
   h = h.replace(/https?:\/\/daytip\.kr\/\?p=(\d+)/g, (m, id) => slugByPostId.get(+id) ? SITE + slugByPostId.get(+id) : m);
+  /* 아직 공개 전인 예약 글로 가는 링크는 글자만 남긴다 — 공개일 다음 빌드(매일 06:05·07:05)에 링크가 다시 살아난다 */
+  h = h.replace(/<a\b[^>]*\shref="(?:https?:\/\/daytip\.kr)?\/([^"/?#]+)\/?"[^>]*>([\s\S]*?)<\/a>/g, (m, slug, inner) => futureSlugs.has(decodeURIComponent(slug)) ? `<span class="soon">${inner}</span>` : m);
   /* srcset 에서 없는 파일은 빼고, 다 없으면 srcset·sizes 자체를 뺀다 */
   h = h.replace(/<img\b[^>]*>/g, (tag) => {
     let t = tag.replace(/\s+srcset="([^"]*)"/, (_, list) => {
