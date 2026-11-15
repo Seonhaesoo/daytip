@@ -285,3 +285,9 @@ h1.title{font-size:26px;line-height:1.3;margin:0 0 10px;letter-spacing:-.01em}
 .site-foot a{color:var(--dim)}
 .notfound{text-align:center;padding:60px 0}
 .notfound h1{font-size:28px}
+/* 2026-11-16 가나표·병음표 설명 표와 자주 묻는 것 */
+.chart table.cmp{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0 6px}
+.chart table.cmp th,.chart table.cmp td{border:1px solid var(--line,#e5e1d8);padding:8px 10px;text-align:left;vertical-align:top}
+.chart table.cmp thead th{background:var(--soft,#f6f2ea);font-weight:700}
+.chart dl.faq dt{font-weight:700;margin:14px 0 4px}
+.chart dl.faq dd{margin:0;color:var(--dim)}

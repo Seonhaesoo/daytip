@@ -245,7 +245,7 @@ const analytics = PROD ? `<script async src="https://www.googletagmanager.com/gt
 <script async crossorigin="anonymous" src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE}&host=${ADSENSE_HOST}"></script>` : '';
 const lifeCatObjs = LIFE_CATS.map((id) => catById.get(id)).filter((c) => c && postsByCat.get(c.id).length);
 
-function shell({ path: p, title, description, body, type = 'website', image, jsonld, noindex = false, robots = '', ads = true, extraHead = '', extraFoot = '', nav = '', js = false }) {
+function shell({ path: p, title, description, body, type = 'website', image, jsonld, noindex = false, googleNoindex = false, robots = '', ads = true, extraHead = '', extraFoot = '', nav = '', js = false }) {
   const full = p === '/' ? `${site.name} — 하루 한 마디 중국어·일본어` : `${title} - ${site.name}`;
   const img = image ? abs(image) : abs(ICON);
   return `<!doctype html>
@@ -256,7 +256,7 @@ function shell({ path: p, title, description, body, type = 'website', image, jso
 <title>${esc(full)}</title>
 <meta name="description" content="${esc(description)}">
 ${robots ? `<meta name="robots" content="${robots}">` : noindex ? '<meta name="robots" content="noindex, follow">' : '<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">'}
-<link rel="canonical" href="${abs(p)}">
+${googleNoindex && !noindex && !robots ? '<meta name="googlebot" content="noindex, follow">\n' : ''}${site.naverVerification ? `<meta name="naver-site-verification" content="${esc(site.naverVerification)}">\n` : ''}<link rel="canonical" href="${abs(p)}">
 <link rel="icon" href="${url(site.icon32)}" sizes="32x32">
 <link rel="icon" href="${url(ICON)}" sizes="192x192">
 <link rel="apple-touch-icon" href="${url(ICON)}">
@@ -316,13 +316,13 @@ function pager(base, n, total) {
   const at = (i) => (i === 1 ? base : `${base}page/${i}/`);
   return `<nav class="pager" aria-label="페이지"><span>${n > 1 ? `<a href="${url(at(n - 1))}" rel="prev">← 이전</a>` : ''}</span><span class="num">${n} / ${total}</span><span>${n < total ? `<a href="${url(at(n + 1))}" rel="next">다음 →</a>` : ''}</span></nav>`;
 }
-function listing({ base, items, title, intro = '', description, nav = '', noindex = false, lead = '', skipFirst = false }) {
+function listing({ base, items, title, intro = '', description, nav = '', noindex = false, googleNoindex = false, lead = '', skipFirst = false }) {
   const total = Math.max(1, Math.ceil(items.length / PER_PAGE));
   for (let n = skipFirst ? 2 : 1; n <= total; n++) {
     const slice = items.slice((n - 1) * PER_PAGE, n * PER_PAGE);
     const p = n === 1 ? base : `${base}page/${n}/`;
     const body = `${n === 1 ? lead : ''}<div class="list-head">${title ? `<h1>${esc(title)}${n > 1 ? ` <small style="font-weight:400;color:var(--dim)">(${n}쪽)</small>` : ''}</h1>` : ''}${n === 1 && intro ? intro : ''}</div><ul class="list">${slice.map(card).join('')}</ul>${pager(base, n, total)}`;
-    write(`${p}index.html`, shell({ path: p, title: title ? (n > 1 ? `${title} ${n}쪽` : title) : site.name, description, body, nav, noindex: noindex || n > 1 }));
+    write(`${p}index.html`, shell({ path: p, title: title ? (n > 1 ? `${title} ${n}쪽` : title) : site.name, description, body, nav, noindex: noindex || n > 1, googleNoindex }));
     if (!noindex) sitemap.push({ loc: p, lastmod: slice[0]?.modified > slice[0]?.date ? slice[0].modified : slice[0]?.date, priority: n === 1 ? (base === '/' ? '1.0' : '0.6') : '0.3' });
   }
 }
@@ -384,7 +384,7 @@ ${bottom}
 ${nav}
 </article>
 ${related.length ? `<section class="related"><h2>${c ? `${esc(catName(c))} 다른 글` : '다른 글'}</h2><ul class="list">${related.map(card).join('')}</ul></section>` : ''}`;
-  write(`/${p.slug}/index.html`, shell({ path: `/${p.slug}/`, title: text(p.title), description: excerpt(p), body, type: 'article', image: th?.rel, jsonld, nav: navKeyFor(p), js: !!info }));
+  write(`/${p.slug}/index.html`, shell({ path: `/${p.slug}/`, title: text(p.title), description: excerpt(p), body, type: 'article', image: th?.rel, jsonld, nav: navKeyFor(p), js: !!info, googleNoindex: isLife(p) }));
   sitemap.push({ loc: `/${p.slug}/`, lastmod: modified, priority: '0.8' });
 }
 
@@ -457,7 +457,7 @@ for (const p of pages) {
   const isCalc = p.slug === 'median-income-calculator';
   const body = `<article><p class="crumb"><a href="${url('/')}">홈</a><span>›</span>${esc(text(p.title))}</p><h1 class="title">${p.title}</h1><div class="entry">${cleanHtml(p.content, { theme: !isCalc })}</div></article>`;
   const jsonld = { '@context': 'https://schema.org', '@type': 'WebPage', name: text(p.title), description: excerpt(p), url: abs(`/${p.slug}/`), datePublished: iso(p.date), dateModified: iso(modified), inLanguage: 'ko', publisher };
-  write(`/${p.slug}/index.html`, shell({ path: `/${p.slug}/`, title: text(p.title), description: excerpt(p), body, jsonld, nav: isCalc ? '/life/' : '', extraHead: isCalc ? `<style>${calcCss}</style>` : '', extraFoot: isCalc ? `<script>${calcJs}</script>` : '' }));
+  write(`/${p.slug}/index.html`, shell({ path: `/${p.slug}/`, title: text(p.title), description: excerpt(p), body, jsonld, googleNoindex: isCalc, nav: isCalc ? '/life/' : '', extraHead: isCalc ? `<style>${calcCss}</style>` : '', extraFoot: isCalc ? `<script>${calcJs}</script>` : '' }));
   sitemap.push({ loc: `/${p.slug}/`, lastmod: modified, priority: '0.5' });
 }
 for (const [slug, lang] of Object.entries(HUB_SLUGS)) if (!pages.some((p) => p.slug === slug)) renderHub(lang, null);   /* 페이지 JSON 이 없어도 목차는 만든다 */
@@ -499,11 +499,11 @@ for (const c of liveCats) {
   const kids = children(c).filter((k) => postsByCat.get(k.id).length);
   const extra = c.id === WORLD_CAT ? '<p>일본과 중국의 역사·문화·사회 이야기입니다. 수업에서 배운 말이 어떤 곳에서 쓰이는지 배경을 알면 낱말이 오래 남습니다.</p>' : c.id === 23 ? `<p>중국어·일본어 수업은 <a href="${url('/chinese-course/')}">중국어 과정</a>·<a href="${url('/japanese-course/')}">일본어 과정</a> 목차에서 일차순으로 보는 편이 낫습니다. 여기는 최신순 목록입니다.</p>` : (c.id === 24 || c.id === 25) ? `<p>최신순 목록입니다. 일차순 목차와 진도는 <a href="${url(LANGS[c.id === 24 ? 'zh' : 'ja'].hub)}">${catName(c)} 과정</a>에서.</p>` : '';
   const intro = `${c.description ? `<p>${esc(c.description)}</p>` : ''}${extra}${kids.length ? `<div class="subcats">${kids.map((k) => `<a href="${url(catPath(k))}">${esc(catName(k))} ${postsByCat.get(k.id).length}</a>`).join('')}</div>` : ''}`;
-  listing({ base: catPath(c), items: postsByCat.get(c.id), title: catName(c), intro, description: `${catName(c)} — ${site.name}의 ${catName(c)} 글 ${postsByCat.get(c.id).length}편`, nav: navKeyForCat(c) });
+  listing({ base: catPath(c), items: postsByCat.get(c.id), title: catName(c), intro, description: `${catName(c)} — ${site.name}의 ${catName(c)} 글 ${postsByCat.get(c.id).length}편`, nav: navKeyForCat(c), googleNoindex: LIFE_CATS.includes(c.id) || LIFE_CATS.includes(c.parent) });
 }
 for (const t of tags) {
   const items = posts.filter((p) => p.tags.includes(t.id));
-  if (items.length) listing({ base: `/tag/${t.slug}/`, items, title: `#${t.name}`, description: `${t.name} 태그 글 ${items.length}편` });
+  if (items.length) listing({ base: `/tag/${t.slug}/`, items, title: `#${t.name}`, description: `${t.name} 태그 글 ${items.length}편`, googleNoindex: items.every(isLife) });
 }
 listing({ base: `/author/${AUTHOR_SLUG}/`, items: posts, title: `${users[0]?.name || site.name}의 글`, description: `${site.name} 전체 글`, noindex: true });
 
@@ -513,7 +513,7 @@ listing({ base: `/author/${AUTHOR_SLUG}/`, items: posts, title: `${users[0]?.nam
 <p class="lead">데이팁이 중국어·일본어 공부 사이트가 되기 전에 쓴 정부지원금·생활법률·부동산·명절 글입니다. 주소는 그대로이고, 내용은 각 글의 수정일 기준입니다.</p>
 <div class="life-grid">${lifeCatObjs.map((c) => { const arr = postsByCat.get(c.id); return `<section class="life-cat card"><h2><a href="${url(catPath(c))}">${esc(catName(c))}</a><small>${arr.length}편</small></h2><ul>${arr.slice(0, 6).map((p) => `<li><a href="${url(`/${p.slug}/`)}">${p.title}</a></li>`).join('')}</ul>${arr.length > 6 ? `<p class="note" style="margin:8px 0 0"><a href="${url(catPath(c))}">${esc(catName(c))} 전체 ${arr.length}편 →</a></p>` : ''}</section>`; }).join('')}</div>
 <p class="life-row" style="margin-top:18px"><b>도구</b><a href="${url('/median-income-calculator/')}">기준 중위소득 계산기</a></p></article>`;
-  write('/life/index.html', shell({ path: '/life/', title: '생활정보', description: '정부지원금·생활법률·안전·부동산·세금·명절 생활상식 글 모음.', body, nav: '/life/', jsonld: { '@context': 'https://schema.org', '@type': 'CollectionPage', name: '생활정보', url: abs('/life/'), inLanguage: 'ko', publisher } }));
+  write('/life/index.html', shell({ googleNoindex: true, path: '/life/', title: '생활정보', description: '정부지원금·생활법률·안전·부동산·세금·명절 생활상식 글 모음.', body, nav: '/life/', jsonld: { '@context': 'https://schema.org', '@type': 'CollectionPage', name: '생활정보', url: abs('/life/'), inLanguage: 'ko', publisher } }));
   sitemap.push({ loc: '/life/', lastmod: posts.filter(isLife)[0]?.date, priority: '0.5' });
 }
 
@@ -575,14 +575,44 @@ function kanaGrid(rows, kata, cls = '') {
 <h3>청음 — 기본 46자</h3>${kanaGrid(GOJUON, true)}
 <h3>탁음·반탁음</h3>${kanaGrid(DAKUTEN, true)}
 <h3>요음</h3>${kanaGrid(YOON, true, 'yoon')}
+<h2 id="count">모두 몇 글자인가요</h2>
+<p>기본 글자(청음)는 히라가나 46자, 가타카나 46자입니다. 여기에 점 두 개를 찍은 <b>탁음 20자</b>(が·ざ·だ·ば행), 동그라미를 붙인 <b>반탁음 5자</b>(ぱ행), 작은 ゃ·ゅ·ょ를 붙인 <b>요음 33개</b>가 더해집니다. 새로 외울 모양은 46자뿐이고 나머지는 기본 글자에 표시를 더한 것입니다.</p>
+<h2 id="when">히라가나와 가타카나는 언제 쓰나요</h2>
+<table class="cmp"><thead><tr><th></th><th>히라가나</th><th>가타카나</th></tr></thead><tbody>
+<tr><th>주로 쓰는 곳</th><td>조사·어미, 한자가 없는 말, 어린이 책</td><td>외래어(コーヒー 커피), 외국 이름, 의성어, 강조</td></tr>
+<tr><th>모양</th><td>둥글고 흘림체</td><td>각지고 획이 짧음</td></tr>
+<tr><th>먼저 외울 것</th><td>✔ 문장 대부분이 히라가나라 먼저</td><td>히라가나를 익힌 뒤 같은 소리로 짝지어</td></tr>
+</tbody></table>
+<h2 id="confusing">헷갈리는 글자</h2>
+<table class="cmp"><thead><tr><th>글자</th><th>구별하는 법</th></tr></thead><tbody>
+<tr><td lang="ja">さ · ち</td><td>아래 곡선의 방향이 반대입니다 — さ(sa)는 c처럼 오른쪽이 열리고, ち(chi)는 숫자 5처럼 왼쪽이 열립니다.</td></tr>
+<tr><td lang="ja">ぬ · め</td><td>ぬ(nu)는 끝에 작은 고리가 있고, め(me)는 고리 없이 끝납니다.</td></tr>
+<tr><td lang="ja">ね · れ · わ</td><td>왼쪽 세로획은 같고 오른쪽 끝이 다릅니다 — ね(ne) 고리, れ(re) 바깥으로 삐침, わ(wa) 둥글게 닫힘.</td></tr>
+<tr><td lang="ja">る · ろ</td><td>る(ru)는 끝에 고리가 있고, ろ(ro)는 고리 없이 열립니다.</td></tr>
+<tr><td lang="ja">シ · ツ</td><td>シ(shi)는 짧은 점 두 개가 왼쪽에 세로로 놓이고 긴 획이 아래에서 위로, ツ(tsu)는 점이 위쪽에 가로로 놓이고 긴 획이 위에서 아래로 내려옵니다.</td></tr>
+<tr><td lang="ja">ソ · ン</td><td>ソ(so)는 점이 위에 있고 긴 획이 위에서 아래로, ン(n)은 점이 왼쪽에 있고 긴 획이 아래에서 위로 올라갑니다.</td></tr>
+<tr><td lang="ja">ク · ケ · タ</td><td>ク(ku) 안쪽에 짧은 획(丶)을 하나 더하면 タ(ta)입니다. ケ(ke)는 가로획이 오른쪽으로 길게 뻗고 아래 획이 따로 떨어져 있습니다.</td></tr>
+</tbody></table>
+<h2 id="how">외우는 순서</h2>
+<ol class="chart-links">
+<li><b>하루 한두 행씩.</b> あ행부터 わ행까지 열흘이면 청음 46자가 끝납니다. 행 이름(か행, さ행)을 함께 외우면 탁음으로 넘어갈 때 쉽습니다.</li>
+<li><b>소리와 함께.</b> 위 표의 글자를 눌러 들으면서 따라 읽고, 로마자는 처음에만 보고 점점 가립니다.</li>
+<li><b>탁음·요음은 규칙으로.</b> か→が처럼 점 두 개는 소리를 탁하게, き+ゃ→きゃ처럼 작은 글자는 앞 글자와 합쳐 한 박자로 읽습니다.</li>
+<li><b>가타카나는 짝으로.</b> 히라가나를 다 외운 뒤 같은 소리의 가타카나를 짝지어 외우고, 메뉴판·과자 봉지 같은 외래어로 연습합니다.</li>
+</ol>
 <h2>읽는 법 메모</h2>
 <ul class="chart-links">
+<li>한국어 외래어 표기법은 낱말 첫머리의 か·た행을 '가·다'로 적어(東京 とうきょう → 도쿄) 표기와 소리가 다를 수 있습니다. 실제 소리는 ㅋ·ㅌ을 약하게 낸 것에 가깝습니다.</li>
 <li>し는 '시', ち는 '치', つ는 '츠'보다 '쯔'에 가깝고, ふ는 입술을 가볍게 스치는 '후'입니다. を는 조사로만 쓰고 '오'로 읽습니다. ん은 뒤에 오는 소리에 따라 ㄴ·ㅁ·ㅇ 받침으로 들립니다.</li>
 <li>가타카나의 긴 소리는 ー 한 글자로 적습니다(コーヒー). 촉음 っ·ッ 는 한 박자 쉬는 받침입니다.</li>
 ${kanaLessons.length ? `<li>글자별 자세한 설명은 수업에서: ${kanaLessons.map((x) => `<a href="${url(`/${x.post.slug}/`)}">${x.day}일차</a>`).join(' · ')}</li>` : ''}
 </ul></article>`;
-  const description = '히라가나·가타카나 오십음도 — 글자를 누르면 일본어 기계 음성으로 소리가 납니다. 로마자와 한국어 읽기를 함께.';
-  write('/kana/index.html', shell({ path: '/kana/', title: '히라가나·가타카나 표', description, body, nav: '/kana/', js: true, jsonld: { '@context': 'https://schema.org', '@type': 'WebPage', name: '히라가나·가타카나 표', description, url: abs('/kana/'), inLanguage: 'ko', publisher } }));
+  const description = '히라가나 표·가타카나 표 — 오십음도 46자와 탁음·반탁음·요음까지, 글자를 누르면 발음이 나옵니다. 헷갈리는 글자 구별법과 외우는 순서.';
+  const faq = [['히라가나는 모두 몇 글자인가요?', '기본 글자(청음)는 46자입니다. 탁음 20자, 반탁음 5자, 요음 33개는 기본 글자에 점·동그라미나 작은 ゃゅょ를 붙인 것이라 새로 외울 모양은 46자입니다.'],
+    ['히라가나와 가타카나 중 무엇을 먼저 외우나요?', '문장 대부분이 히라가나로 쓰이므로 히라가나를 먼저 외우고, 같은 소리의 가타카나를 짝지어 익히는 것이 일반적입니다.'],
+    ['を와 お는 소리가 다른가요?', '현대 일본어에서 둘 다 보통 \'오\'로 읽습니다. を는 \'~을/를\'에 해당하는 조사로만 씁니다.']];
+  const faqLd = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) };
+  write('/kana/index.html', shell({ path: '/kana/', title: '히라가나 표·가타카나 표 — 발음 듣기와 외우는 법', description, body: body.replace('</article>', `<h2 id="faq">자주 묻는 것</h2><dl class="faq">${faq.map(([q, a]) => `<dt>${esc(q)}</dt><dd>${esc(a)}</dd>`).join('')}</dl></article>`), nav: '/kana/', js: true, jsonld: [{ '@context': 'https://schema.org', '@type': 'WebPage', name: '히라가나·가타카나 표', description, url: abs('/kana/'), inLanguage: 'ko', publisher }, faqLd] }));
   sitemap.push({ loc: '/kana/', lastmod: lessons.ja.map((x) => x.post.date).sort().pop(), priority: '0.7' });
 }
 
@@ -619,10 +649,39 @@ function pyCell(sym, hanzi, py, extraTop = '') {
 <h3>i 로 시작</h3>${group(FINALS, 16, 25)}
 <h3>u 로 시작</h3>${group(FINALS, 25, 33)}
 <h3>ü 로 시작 (j q x y 뒤에서는 점을 빼고 u 로 적습니다)</h3>${group(FINALS, 33, 36)}
+<h2 id="mark">성조 부호는 어디에 찍나요</h2>
+<ol class="chart-links">
+<li><b>a가 있으면 a에</b> — hǎo, guān, xià</li>
+<li><b>a가 없으면 o나 e에</b> — zǒu, lèi, xué</li>
+<li><b>iu·ui는 뒤 글자에</b> — liù, guì</li>
+<li>i에 부호를 찍을 때는 점을 빼고 찍습니다 — nǐ, yī</li>
+</ol>
+<h2 id="sandhi">성조가 바뀌는 경우</h2>
+<table class="cmp"><thead><tr><th>규칙</th><th>보기</th></tr></thead><tbody>
+<tr><td>3성 + 3성 → 앞이 2성</td><td lang="zh-Hans">你好 nǐ hǎo → ní hǎo</td></tr>
+<tr><td>不 bù + 4성 → bú</td><td lang="zh-Hans">不是 bú shì · 不要 bú yào</td></tr>
+<tr><td>一 yī + 4성 → yí</td><td lang="zh-Hans">一个 yí ge · 一样 yí yàng</td></tr>
+<tr><td>一 yī + 1·2·3성 → yì</td><td lang="zh-Hans">一天 yì tiān · 一年 yì nián · 一起 yì qǐ</td></tr>
+</tbody></table>
+<p class="note">사전과 교과서는 보통 원래 성조(bù, yī)로 적고 읽을 때만 바꿉니다. 一은 혼자 셀 때·서수·끝에 올 때는 yī 그대로입니다.</p>
+<h2 id="hard">한국 사람이 헷갈리는 소리</h2>
+<table class="cmp"><thead><tr><th>병음</th><th>내는 법</th><th>가까운 소리</th></tr></thead><tbody>
+<tr><td>j · q · x</td><td>혀 앞면을 아랫니 뒤에 두고 입천장 쪽으로</td><td>지 · 치 · 시</td></tr>
+<tr><td>z · c · s</td><td>혀끝을 윗니 뒤에 대고</td><td>ㅉ · ㅊ · ㅆ</td></tr>
+<tr><td>zh · ch · sh · r</td><td>혀끝을 살짝 말아 입천장 앞쪽에 대고(권설음)</td><td>한국어에 없는 소리 — 혀를 만 '즈·츠·스·르'</td></tr>
+<tr><td>zhi chi shi ri zi ci si 의 i</td><td>'이'가 아니라 앞 자음 소리를 그대로 끄는 소리</td><td>'으'에 가까움</td></tr>
+<tr><td>ü</td><td>'위'를 입술 모양을 유지한 채 한 소리로</td><td>입을 오므린 '이'</td></tr>
+<tr><td>-n · -ng</td><td>-n 은 혀끝을 윗잇몸에, -ng 은 혀 뒤를 올려</td><td>ㄴ 받침 · ㅇ 받침</td></tr>
+</tbody></table>
+<p class="note">ü 는 j·q·x·y 뒤에서 점을 빼고 u 로 적지만(ju, qu, xu, yu) 소리는 그대로 ü 입니다. n·l 뒤에서는 점을 남겨 nü, lü 로 구별합니다.</p>
 ${soundLessons.length ? `<h2>발음 수업</h2><ul class="chart-links">${soundLessons.map((x) => `<li><a href="${url(`/${x.post.slug}/`)}"><b>${x.day}일차</b> ${x.post.title}</a></li>`).join('')}</ul>` : ''}
 </article>`;
-  const description = '중국어 병음표 — 성조 네 개, 성모 21개, 운모 36개를 보기 글자와 함께. 수업 녹음이 있는 글자는 녹음으로, 나머지는 기계 음성으로 들을 수 있습니다.';
-  write('/pinyin/index.html', shell({ path: '/pinyin/', title: '병음·성조표', description, body, nav: '/pinyin/', js: true, jsonld: { '@context': 'https://schema.org', '@type': 'WebPage', name: '병음·성조표', description, url: abs('/pinyin/'), inLanguage: 'ko', publisher } }));
+  const description = '중국어 병음표·성조표 — 성모 21개, 운모 36개, 성조 4개를 누르면 발음이 나옵니다. 성조 부호 찍는 자리, 3성·不·一 성조 변화, 헷갈리는 zh·ch·sh 발음.';
+  const faq = [['중국어 병음은 모두 몇 개인가요?', '음절 앞소리인 성모가 21개(y·w 제외), 뒷소리인 운모가 36개 안팎이고, 여기에 성조 네 개와 경성이 붙습니다.'],
+    ['성조 부호는 어느 글자 위에 찍나요?', 'a가 있으면 a에, 없으면 o나 e에, iu·ui는 뒤 글자에 찍습니다.'],
+    ['你好는 왜 ní hǎo로 읽나요?', '3성이 두 번 이어지면 앞의 3성을 2성으로 읽는 규칙 때문입니다. 적을 때는 보통 nǐ hǎo로 그대로 씁니다.']];
+  const faqLd = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) };
+  write('/pinyin/index.html', shell({ path: '/pinyin/', title: '중국어 병음표·성조표 — 발음 듣기와 성조 변화', description, body: body.replace('</article>', `<h2 id="faq">자주 묻는 것</h2><dl class="faq">${faq.map(([q, a]) => `<dt>${esc(q)}</dt><dd>${esc(a)}</dd>`).join('')}</dl></article>`), nav: '/pinyin/', js: true, jsonld: [{ '@context': 'https://schema.org', '@type': 'WebPage', name: '병음·성조표', description, url: abs('/pinyin/'), inLanguage: 'ko', publisher }, faqLd] }));
   sitemap.push({ loc: '/pinyin/', lastmod: lessons.zh.map((x) => x.post.date).sort().pop(), priority: '0.7' });
 }
 
