@@ -241,8 +241,7 @@ const CSS = fs.readFileSync(path.join(SRC, 'style.css'), 'utf8').replace(/\n+/g,
 const STUDY_JS = fs.readFileSync(path.join(SRC, 'study.js'), 'utf8');
 const ICON = site.icon;
 const analytics = PROD ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${GTAG_ID}"></script>
-<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${GTAG_ID}');</script>
-<script async crossorigin="anonymous" src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE}&host=${ADSENSE_HOST}"></script>` : '';
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${GTAG_ID}');</script>` : '';   /* 애드센스 코드는 2026-11-25 뺐다(승인 전이라 수익 0) - 다시 신청할 때 넣는다 */
 const lifeCatObjs = LIFE_CATS.map((id) => catById.get(id)).filter((c) => c && postsByCat.get(c.id).length);
 
 function shell({ path: p, title, description, body, type = 'website', image, jsonld, noindex = false, googleNoindex = false, robots = '', ads = true, extraHead = '', extraFoot = '', nav = '', js = false }) {
